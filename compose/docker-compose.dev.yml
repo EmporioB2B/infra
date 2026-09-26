@@ -1,0 +1,422 @@
+# Emporio B2B — compose de DESENVOLVIMENTO/INTEGRAÇÃO (TASK-INFRA-001)
+#
+# Ambiente local único "como se fosse produção": front, api, radar, postgres,
+# RustFS (R2 do Back, incluindo o bucket público de fotos) e Mailpit (SMTP),
+# com a mesma topologia de redes da produção (docs/networks.md).
+#
+# Uso (a partir da raiz deste repo; exige os repos irmãos como vizinhos):
+#   cp env/.env.dev.example env/.env.dev  # preencher (openssl rand)
+#   scripts/up-dev.sh
+#   scripts/smoke.sh
+#
+# Fontes dos fatos: .opencode/context/servicos.md, conferidas em 2026-09-26
+# em Backend_Java (Dockerfile, application-container.yml,
+# docker-compose.rustfs.yml), Radar_Middleware_Python (Dockerfile,
+# docker-compose.yml) e Front_Angular (Dockerfile-dev, proxy.conf.json).
+#
+# Validação: docker compose --env-file env/.env.dev \
+#              -f compose/docker-compose.dev.yml config --quiet
+
+name: emporio-dev
+
+x-logging: &dev-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Banco do Back em dev (produção usa Supabase externo; nunca espelhar isto
+  # para prod). Espelha o postgres-dev do repo Backend_Java.
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: emporio
+      POSTGRES_USER: emporio
+      POSTGRES_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD obrigatória (senha do postgres de dev)}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U emporio -d emporio"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging: *dev-logging
+
+  # ---------------------------------------------------------------------------
+  # API Spring Boot. O nome do serviço É `backend` de propósito: o
+  # proxy.conf.json do Front aponta para http://backend:8080. Em produção o
+  # mesmo serviço se chama `api`.
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ../../Backend_Java
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: dev,container
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/emporio
+      SPRING_DATASOURCE_USERNAME: emporio
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD obrigatória}
+      APP_JWT_SECRET: ${APP_JWT_SECRET:?APP_JWT_SECRET obrigatória (>=256 bits; gere com openssl rand -hex 32)}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:4200}
+      RADAR_BASE_URL: http://radar:8000
+      # O default do Back (application.yml: read 1s / connect 500ms) é curto
+      # para a PRIMEIRA consulta do dev: o Radar abre DuckDB+httpfs frio e a
+      # query de aquecimento levou ~4,5s (evidência 2026-09-26; seguintes
+      # ~0,3s). Em dev o frio acontece a cada start do container.
+      RADAR_READ_TIMEOUT: ${RADAR_READ_TIMEOUT:-10s}
+      # O profile `container` defaulta secure=true (TLS na borda). Em dev não
+      # há HTTPS: sem este override o cookie de refresh (SameSite=Lax, Secure)
+      # não é aceito em http://localhost e o login quebra.
+      APP_AUTH_COOKIE_SECURE: "false"
+      # Storage: RustFS local emula o R2 (espelho do override
+      # docker-compose.rustfs.yml do Back — buckets e prefixos idênticos).
+      #
+      # ATENÇÃO — upload directo do navegador usa URL PRÉ-ASSINADA e o SigV4
+      # assina o cabeçalho Host: o navegador PRECISA resolver exatamente o
+      # hostname do endpoint. Por isso o endpoint é `http://rustfs:9000`
+      # (mesmo nome do override do Back — o StorageProperties.isLocalHost
+      # dele tem allowlist HTTP hardcoded: somente `rustfs`, `localhost`,
+      # `127.0.0.1` e `::1`; `rustfs.localhost` foi testado em 2026-09-26 e é
+      # REJEITADO no binding). O navegador resolve `rustfs` via hosts local do
+      # operador (127.0.0.1 rustfs — documentado em docs/networks.md; sem
+      # isso: net::ERR_NAME_NOT_RESOLVED no PUT). O CORS dos buckets (devio no
+      # rustfs-init abaixo) cobre o preflight cross-origin localhost:4200 →
+      # rustfs:9000. Em produção nada disso existe: endpoint real R2, público
+      # pela borda.
+      APP_STORAGE_PROVIDER: R2
+      APP_STORAGE_ALLOW_INSECURE_HTTP: "true"
+      APP_STORAGE_READ_WRITE_R2_ENDPOINT: http://rustfs:9000
+      APP_STORAGE_READ_WRITE_R2_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:?RUSTFS_ACCESS_KEY obrigatória}
+      APP_STORAGE_READ_WRITE_R2_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:?RUSTFS_SECRET_KEY obrigatória}
+      APP_STORAGE_READ_ONLY_R2_ENDPOINT: http://rustfs:9000
+      APP_STORAGE_READ_ONLY_R2_ACCESS_KEY_ID: ${RUSTFS_READ_ONLY_ACCESS_KEY:?RUSTFS_READ_ONLY_ACCESS_KEY obrigatória}
+      APP_STORAGE_READ_ONLY_R2_SECRET_ACCESS_KEY: ${RUSTFS_READ_ONLY_SECRET_KEY:?RUSTFS_READ_ONLY_SECRET_KEY obrigatória}
+      APP_STORAGE_R2_QUARENTENA_BUCKET: quarantine-local
+      APP_STORAGE_R2_PRIVADO_BUCKET: private-local
+      APP_STORAGE_R2_PUBLICO_BUCKET: public-local
+      APP_STORAGE_R2_QUARENTENA_PREFIX: quarantine/
+      APP_STORAGE_R2_PRIVADO_PREFIX: private/
+      APP_STORAGE_R2_PUBLICO_PREFIX: public/
+      APP_STORAGE_R2_REGION: ${RUSTFS_REGION:-us-east-1}
+      # publicUrl do Back = base + "/" + storageKey (R2StorageProvider.java)
+      # e StorageProperties.publicBaseUrlIsSafe PROÍBE path na base (só
+      # ""/null ou "/"). No RustFS local isso é um beco sem saída: a base
+      # precisa de path para o path-style (http://localhost:9000/public-local)
+      # e o vhost-style (http://public-local.localhost:9000) foi testado com
+      # evidência em 2026-09-26 → HTTP 403. Por isso o default fica VAZIO,
+      # igual ao override docker-compose.rustfs.yml do Back; `urlPublica()`
+      # lançará erro somente quando um admin publicar foto com URL pública.
+      # Dependência registrada: TASK-INFRA-006 (repo Backend_Java — permitir
+      # base com path para emuladores S3 locais OU implementar o
+      # dev-publico-base-url que o contexto já anunciava). Enquanto isso o
+      # smoke verifica o bucket público servindo anonimamente em path-style
+      # direto (http://localhost:9000/public-local/...), que funciona.
+      # Em produção a base é o domínio custom da borda sem path
+      # (https://media.emporiob2b.com.br) e não há bloqueio.
+      APP_STORAGE_R2_PUBLICO_BASE_URL: ${APP_STORAGE_R2_PUBLICO_BASE_URL:-}
+      # Email: capturado pelo Mailpit local (nada é entregue de verdade).
+      # O Back exige SMTP "de verdade" quando habilitado (application.yml
+      # hard-codeia auth=true + starttls.required=true +
+      # checkserveridentity=true, e EmailConfiguration valida isso no boot):
+      # por isso o Mailpit serve STARTTLS com o cert dev SAN=mailpit e o JVM
+      # confia nele via truststore dedicado (scripts/gen-dev-certs.sh).
+      # A senha abaixo é local de dev; o Mailpit aceita qualquer par
+      # (MP_SMTP_AUTH_ACCEPT_ANY).
+      APP_EMAIL_ENABLED: "true"
+      APP_EMAIL_HEALTH_ENABLED: "true"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_USERNAME: mailpit-dev
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?SMTP_PASSWORD obrigatória (senha SMTP local do dev; o Mailpit aceita qualquer par)}
+      JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/certs/truststore.p12 -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.trustStorePassword=emporio-dev-truststore
+      APP_EMAIL_FROM: ${APP_EMAIL_FROM:?APP_EMAIL_FROM obrigatória (remetente dos emails de dev)}
+      APP_EMAIL_REPLY_TO: ${APP_EMAIL_REPLY_TO:-no-reply@emporiob2b.com.br}
+      # Assets dos templates de email: bucket público do RustFS em dev.
+      APP_EMAIL_MEDIA_BASE_URL: ${APP_EMAIL_MEDIA_BASE_URL:-http://localhost:9000}
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
+    volumes:
+      # truststore PKCS12 com o certificado dev do Mailpit (gerado por
+      # scripts/gen-dev-certs.sh; material efêmero, nunca versionado).
+      - ../certs/dev:/certs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rustfs-init:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
+      radar:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "2", "http://127.0.0.1:8081/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      start_period: 40s
+      retries: 12
+    networks:
+      - default
+      - radar-net
+    restart: unless-stopped
+    logging: *dev-logging
+
+  # ---------------------------------------------------------------------------
+  # Radar — SEM `ports:` (nunca publicar no host) e preso à radar-net
+  # exclusiva + egress. Em dev usa o bucket R2 de teste REAL: o config.py
+  # valida https://<account>.r2.cloudflarestorage.com e rejeita S3 local.
+  # As credenciais vivem no .env local do repo Radar — este compose apenas o
+  # referencia por caminho; o arquivo nunca é lido por agentes, copiado ou
+  # versionado.
+  # ---------------------------------------------------------------------------
+  radar:
+    build:
+      context: ../../Radar_Middleware_Python
+      dockerfile: Dockerfile
+    env_file:
+      - ../../Radar_Middleware_Python/.env
+    environment:
+      PORT: 8000
+      ENVIRONMENT: development
+      LOG_LEVEL: ${RADAR_LOG_LEVEL:-INFO}
+      SQLITE_PATH: /var/lib/radar-middleware/state/radar.sqlite3
+    volumes:
+      - radar_state:/var/lib/radar-middleware/state
+    healthcheck:
+      # A imagem não traz curl/wget; mesmo teste do compose local do Radar.
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')\""]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+    networks:
+      - radar-net
+      - egress
+    restart: unless-stopped
+    logging: *dev-logging
+
+  # ---------------------------------------------------------------------------
+  # RustFS — emula o R2 do Back (quarentena/privado/público de fotos).
+  # Espelho fiel do docker-compose.rustfs.yml do Backend_Java, com um único
+  # desvio DEV-ONLY no rustfs-init (leia o comentário lá): leitura anônima do
+  # bucket público, exigida pelo critério "fotos de produto/marca carregam".
+  # Em produção o público é servido pela borda (media.*), nunca por aqui.
+  # ---------------------------------------------------------------------------
+  rustfs:
+    image: rustfs/rustfs:1.0.0-rc.6
+    command: ["server", "/data"]
+    networks:
+      default:
+        aliases:
+          # Reservada para o dia em que o Back aceitar o wildcard
+          # *.localhost no isLocalHost (ver TASK-INFRA-006 — eliminaria o
+          # hosts local do navegador para URLs pré-assinadas). HOJE o
+          # endpoint assinado é `rustfs` (allowlist hardcoded do Back);
+          # esta alias é inofensiva e documenta a direção.
+          - rustfs.localhost
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:?RUSTFS_ACCESS_KEY obrigatória}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:?RUSTFS_SECRET_KEY obrigatória}
+      RUSTFS_ADDRESS: ${RUSTFS_ADDRESS:-:9000}
+      RUSTFS_CONSOLE_ADDRESS: ${RUSTFS_CONSOLE_ADDRESS:-:9001}
+      RUSTFS_CONSOLE_ENABLE: ${RUSTFS_CONSOLE_ENABLE:-true}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - rustfs-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --show-error --max-time 2 http://127.0.0.1:9000/health"]
+      interval: 2s
+      timeout: 3s
+      start_period: 5s
+      retries: 15
+    restart: unless-stopped
+    logging: *dev-logging
+
+  rustfs-init:
+    image: rustfs/rc:v0.1.30
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:?RUSTFS_ACCESS_KEY obrigatória}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:?RUSTFS_SECRET_KEY obrigatória}
+      RUSTFS_REGION: ${RUSTFS_REGION:-us-east-1}
+      RUSTFS_READ_ONLY_ACCESS_KEY: ${RUSTFS_READ_ONLY_ACCESS_KEY:?RUSTFS_READ_ONLY_ACCESS_KEY obrigatória}
+      RUSTFS_READ_ONLY_SECRET_KEY: ${RUSTFS_READ_ONLY_SECRET_KEY:?RUSTFS_READ_ONLY_SECRET_KEY obrigatória}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        validate_credential() {
+          value="$${1}"
+          case "$${value}" in
+            ''|*[[:space:]]*|*'<'*|*'>'*|*'$$'*|replace-with-*|replace_with_*|your-*|your_*|changeme|change-me|change_me|example|example-*|example_*|youraccesskey*|yoursecret*|replacewith*) exit 1 ;;
+          esac
+        }
+        case "$${RUSTFS_ACCESS_KEY}" in ''|*[!A-Za-z0-9]*) exit 1 ;; esac
+        case "$${RUSTFS_READ_ONLY_ACCESS_KEY}" in ''|*[!A-Za-z0-9]*) exit 1 ;; esac
+        [ "$${#RUSTFS_ACCESS_KEY}" -ge 16 ] && [ "$${#RUSTFS_ACCESS_KEY}" -le 128 ] || exit 1
+        [ "$${#RUSTFS_READ_ONLY_ACCESS_KEY}" -ge 16 ] && [ "$${#RUSTFS_READ_ONLY_ACCESS_KEY}" -le 128 ] || exit 1
+        validate_credential "$${RUSTFS_ACCESS_KEY}"
+        validate_credential "$${RUSTFS_SECRET_KEY}"
+        validate_credential "$${RUSTFS_READ_ONLY_ACCESS_KEY}"
+        validate_credential "$${RUSTFS_READ_ONLY_SECRET_KEY}"
+        if [ "$${RUSTFS_ACCESS_KEY}" = "$${RUSTFS_READ_ONLY_ACCESS_KEY}" ] || [ "$${RUSTFS_SECRET_KEY}" = "$${RUSTFS_READ_ONLY_SECRET_KEY}" ]; then exit 1; fi
+        rc alias set --quiet --region "$${RUSTFS_REGION}" --bucket-lookup path \
+          local http://rustfs:9000 "$${RUSTFS_ACCESS_KEY}" "$${RUSTFS_SECRET_KEY}"
+        rc mb --quiet --ignore-existing local/quarantine-local
+        rc mb --quiet --ignore-existing local/private-local
+        rc mb --quiet --ignore-existing local/public-local
+        printf '%s\n' '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject"],"Resource":["arn:aws:s3:::private-local/*","arn:aws:s3:::public-local/*"]}]}' > /tmp/emporio-storage-read-only.json
+        rc admin policy detach --quiet local emporio-storage-read-only --user "$${RUSTFS_READ_ONLY_ACCESS_KEY}" || true
+        rc admin user rm --quiet local "$${RUSTFS_READ_ONLY_ACCESS_KEY}" || true
+        rc admin policy rm --quiet local emporio-storage-read-only || true
+        rc admin policy create --quiet local emporio-storage-read-only /tmp/emporio-storage-read-only.json
+        rc admin user add --quiet local "$${RUSTFS_READ_ONLY_ACCESS_KEY}" "$${RUSTFS_READ_ONLY_SECRET_KEY}"
+        rc admin policy attach --quiet local emporio-storage-read-only --user "$${RUSTFS_READ_ONLY_ACCESS_KEY}"
+        # DESVIO dev-only (não existe no override do Back): o navegador não
+        # envia credencial S3, então o bucket público precisa de leitura
+        # anônima para o critério "fotos de produto/marca carregam a partir do
+        # bucket público do RustFS". Somente public-local; quarentena e
+        # privado permanecem fechados. Em produção o público é servido pela
+        # borda Cloudflare (media.emporiob2b.com.br), não pelo RustFS.
+        rc bucket anonymous set download local/public-local
+        # DESVIO dev-only #2: CORS nos três buckets. O direct-upload do Back
+        # faz PUT pré-assinado DESDE o navegador (origem http://localhost:4200;
+        # :4000 para quando o perfil prodlike existir), com cabeçalhos
+        # customizados (x-amz-checksum-*, if-none-match) que exigem preflight.
+        # Sem CORS o RustFS responde OPTIONS sem ACAO e o browser bloqueia o
+        # PUT (verificado 2026-09-26). Em produção o CORS mora na borda/bucket
+        # público R2 e o direct-upload fala com o endpoint público real.
+        cat > /tmp/emporio-dev-cors.xml <<'EOF'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <CORSConfiguration>
+          <CORSRule>
+            <AllowedOrigin>http://localhost:4200</AllowedOrigin>
+            <AllowedOrigin>http://localhost:4000</AllowedOrigin>
+            <AllowedOrigin>http://127.0.0.1:4200</AllowedOrigin>
+            <AllowedMethod>PUT</AllowedMethod>
+            <AllowedMethod>GET</AllowedMethod>
+            <AllowedMethod>HEAD</AllowedMethod>
+            <AllowedMethod>POST</AllowedMethod>
+            <AllowedMethod>DELETE</AllowedMethod>
+            <!-- `*` é o único wildcard que a spec S3 permite; `x-amz-*` NÃO é
+                 suportado pelo RustFS e derruba o preflight com 403
+                 (evidência 2026-09-26: ACRH com x-amz-checksum-sha256 ->
+                 403; com `*` -> 200). A restrição relevante (origem)
+                 permanece explícita abaixo. -->
+            <AllowedHeader>*</AllowedHeader>
+            <ExposeHeader>ETag</ExposeHeader>
+            <ExposeHeader>x-amz-checksum-crc32</ExposeHeader>
+            <ExposeHeader>x-amz-checksum-crc32c</ExposeHeader>
+            <ExposeHeader>x-amz-checksum-sha1</ExposeHeader>
+            <ExposeHeader>x-amz-checksum-sha256</ExposeHeader>
+            <ExposeHeader>x-amz-meta-content-type</ExposeHeader>
+            <MaxAgeSeconds>3600</MaxAgeSeconds>
+          </CORSRule>
+        </CORSConfiguration>
+        EOF
+        for bucket in quarantine-local private-local public-local; do
+          rc bucket cors set "local/$${bucket}" --file /tmp/emporio-dev-cors.xml
+        done
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Mailpit — captura todo SMTP do Back; nada é entregue a caixas reais.
+  # UI de leitura/auditoria visual dos emails em http://localhost:8025.
+  # Porta 1025 é interna à rede `default` (não publicada).
+  # ---------------------------------------------------------------------------
+  mailpit:
+    image: axllent/mailpit:v1.31.2
+    ports:
+      - "127.0.0.1:8025:8025"
+    environment:
+      MP_MAX_MESSAGES: ${MP_MAX_MESSAGES:-500}
+      # STARTTLS com o certificado dev (SAN=mailpit) + auth aceitando
+      # qualquer par de credenciais — o Back exige SMTP autenticado com
+      # starttls obrigatório antes de subir com email habilitado
+      # (EmailConfiguration.validateEnabledConfiguration).
+      MP_SMTP_TLS_CERT: /certs/mailpit.crt
+      MP_SMTP_TLS_KEY: /certs/mailpit.key
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+    volumes:
+      - ../certs/dev:/certs:ro
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      start_period: 5s
+      retries: 12
+    restart: unless-stopped
+    logging: *dev-logging
+
+  # ---------------------------------------------------------------------------
+  # Front em `ng serve` com hot-reload (Dockerfile-dev). O proxy interno do
+  # dev-server chama http://backend:8080 (proxy.conf.json) — por isso o
+  # serviço da api se chama `backend`. Bind-mounts de src/ e public/: editar
+  # código não exige rebuild.
+  # ---------------------------------------------------------------------------
+  front-dev:
+    build:
+      context: ../../Front_Angular
+      dockerfile: Dockerfile-dev
+    volumes:
+      - ../../Front_Angular/src:/app/src
+      - ../../Front_Angular/public:/app/public
+    ports:
+      - "127.0.0.1:4200:4200"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      # O Dockerfile-dev não define HEALTHCHECK; mesma técnica fetch do Node
+      # usado no Dockerfile de produção do Front.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4200/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 90s
+      retries: 6
+    restart: unless-stopped
+    logging: *dev-logging
+
+  # ---------------------------------------------------------------------------
+  # front-prod (perfil "prodlike") — NÃO CRIADO AINDA (bloqueado).
+  #
+  # A TASK-INFRA-001 previa este serviço sob `profiles: ["prodlike"]`
+  # (imagem SSR de produção em 127.0.0.1:4000) para o E2E manual "como se
+  # fosse produção", mas a TASK-INFRA-002 (repo Front_Angular) ainda não
+  # concluiu os pré-requisitos de deploy. Conferido em 2026-09-26:
+  #   - angular.json: security.allowedHosts = ["localhost"] → o SSR rejeita
+  #     qualquer Host que não seja localhost;
+  #   - Dockerfile do Front: sem ARGs de URL; apiBaseUrl/imageBaseUrl são
+  #     compilados vazios em produção.
+  # Ao concluir a TASK-INFRA-002, adicionar aqui o serviço `front-prod` com
+  # build.args e allowedHosts ajustados, e atualizar docs/networks.md.
+  # Até lá, o E2E manual usa `front-dev` (percurso verde igualmente).
+  # ---------------------------------------------------------------------------
+
+networks:
+  default:
+    # front-dev <-> backend <-> emuladores (postgres, rustfs, mailpit).
+  radar-net:
+    # Zona de contenção do Radar (sem auth serviço-a-serviço hoje):
+    # exclusivamente backend <-> radar, sem saída para o host nem para as
+    # demais redes. Espelho da rede homônima em produção.
+    internal: true
+  egress:
+    # Saída controlada do Radar para o R2 de teste e ViaCEP. Um serviço em
+    # `internal` + egress alcança a internet somente pela egress
+    # (comportamento documentado do Docker).
+    driver: bridge
+
+volumes:
+  pgdata:
+  rustfs-data:
+  radar_state:

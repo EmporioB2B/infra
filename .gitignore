@@ -1,0 +1,52 @@
+# OS — incluindo artefato NTFS de download no Windows (Alternate Data
+# Streams). O padrão `.env` etc. NÃO casa com `arquivo:Zone.Identifier`.
+.DS_Store
+Thumbs.db
+desktop.ini
+*:Zone.Identifier
+
+# Editores
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Ambiente local e segredos (nunca versionar; só exemplos com placeholders)
+.env
+.env.*
+!.env.example
+!.env.*.example
+.dev-secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+
+# Artefatos locais
+*.log
+logs/
+node_modules/
+__pycache__/
+*.pyc
+
+# OpenCode — configuração pessoal e artefatos gerados
+.opencode/node_modules/
+.opencode/package.json
+.opencode/package-lock.json
+.opencode/bun.lock
+.opencode/opencode.json*
+.opencode/tui.json*
+/opencode.json*
+/tui.json*
+
+# OpenCode — estado pessoal e de planejamento do ciclo.
+# Decisão do operador em 2026-09-26 (revogando a exceção anterior):
+# `tasks/futuras/` é planejamento LOCAL, não versionado, alinhado à
+# convenção dos projetos de aplicação. Apenas `tasks/passadas/`
+# (histórico imutável com evidências) e `tasks/README.md` permanecem
+# no git.
+.opencode/tasks/task_atual.md
+.opencode/tasks/futuras/
+.opencode/mensagem/**
