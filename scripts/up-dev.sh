@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Subi o stack de desenvolvimento integrado (compose/docker-compose.dev.yml).
+# Bootstrap RustFS e sobe o stack de desenvolvimento integrado
+# (compose/docker-compose.dev.yml).
 #
 # Uso (a partir de qualquer diretório):
 #   scripts/up-dev.sh [--no-build]
@@ -7,8 +8,8 @@
 # Pré-checagens: daemon Docker, env/.env.dev presente (segredos locais de
 # dev), .env local do Radar presente (credenciais do R2 de teste — o arquivo
 # NÃO é lido nem copiado), repos irmãos vizinhos e `config --quiet` verde.
-# Depois: build (opcional via --no-build) + up -d --wait, que só retorna com
-# TODOS os serviços healthy (ou falha com código != 0).
+# Depois: aguarda RustFS, corrige attachment ausente, então faz build
+# (opcional via --no-build) + up -d --wait de toda a stack.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -40,17 +41,63 @@ compose() {
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
 
+rustfs_network_name() {
+  local container_id project_name
+  container_id="$(compose ps -q rustfs)"
+  [[ -n "$container_id" ]] || return 1
+  project_name="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$container_id")"
+  [[ -n "$project_name" ]] || return 1
+  printf '%s_default\n' "$project_name"
+}
+
+rustfs_has_expected_network() {
+  local container_id network_name attached
+  container_id="$(compose ps -q rustfs)"
+  [[ -n "$container_id" ]] || return 1
+  network_name="$(rustfs_network_name)" || return 1
+  attached="$(docker inspect --format "{{if index .NetworkSettings.Networks \"$network_name\"}}yes{{else}}no{{end}}" "$container_id")"
+  [[ "$attached" == "yes" ]]
+}
+
+ensure_rustfs_network() {
+  local network_name
+  network_name="$(rustfs_network_name)" || fail "não foi possível identificar o projeto Compose do serviço rustfs"
+
+  if rustfs_has_expected_network; then
+    echo "RustFS conectado à rede $network_name"
+    return
+  fi
+
+  echo "AVISO: RustFS sem attachment em $network_name; recriando somente o container (o volume rustfs-data será preservado)." >&2
+  compose up -d --no-deps --force-recreate --wait --wait-timeout 120 rustfs \
+    || fail "não foi possível recriar/aguardar o serviço rustfs"
+  rustfs_has_expected_network \
+    || fail "rustfs continua sem attachment em $network_name após uma recriação"
+  echo "RustFS reconectado à rede $network_name"
+}
+
 echo "==> certificando TLS dev do Mailpit (idempotente)"
 bash "$ROOT/scripts/gen-dev-certs.sh"
 
 echo "==> validando compose (config --quiet)"
 compose config --quiet
 
+echo "==> subindo e aguardando RustFS antes do bootstrap dependente"
+compose up -d "${BUILD_FLAG[@]}" --wait --wait-timeout 120 rustfs
+ensure_rustfs_network
+
 echo "==> up -d ${BUILD_FLAG[*]} com espera por todos healthy (--wait)"
 # `up --wait` retorna somente quando todos os healthchecks ficam healthy.
 # start_period do radar (90s, sincroniza SQLite do R2) + backend (Flyway)
 # exigem timeout generoso.
-compose up -d "${BUILD_FLAG[@]}" --wait --wait-timeout 600
+if compose up -d "${BUILD_FLAG[@]}" --wait --wait-timeout 600; then
+  :
+else
+  status=$?
+  echo "ERRO: stack não ficou saudável; logs recentes do rustfs-init:" >&2
+  compose logs --no-color --tail=100 rustfs-init >&2 || true
+  exit "$status"
+fi
 
 echo "==> seed do admin de dev (idempotente)"
 bash "$ROOT/scripts/seed-admin-dev.sh" | tail -3

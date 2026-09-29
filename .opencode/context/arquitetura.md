@@ -145,6 +145,7 @@ Alvo; o que existe hoje em cada caminho está fotografado em
 
 ```text
 infra/
+  README.md                    # setup dev e resolução do RustFS no navegador
   AGENTS.md
   compose/
     docker-compose.dev.yml      # ambiente local integrado
@@ -156,7 +157,7 @@ infra/
   cloudflare/
     tunnel-ingress.md           # hostnames, DNS e media->R2
   scripts/
-    up-dev.sh  smoke.sh  e2e-run.sh
+    up-dev.sh  init-rustfs.sh  smoke.sh  e2e-run.sh
   docs/
     deploy-dokploy.md  networks.md  rollback.md  cicd.md
   .github/workflows/

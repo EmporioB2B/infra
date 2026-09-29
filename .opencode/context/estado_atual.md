@@ -1,6 +1,6 @@
 # Estado atual
 
-Fotografia factual de 2026-09-26. Não é cronologia de tasks.
+Fotografia factual de 2026-09-29. Não é cronologia de tasks.
 
 ## O que existe
 
@@ -15,21 +15,27 @@ Fotografia factual de 2026-09-26. Não é cronologia de tasks.
   `cloudflare-edge`, `dokploy-deploy`, `cicd-ghcr`, `secrets-env`,
   `verification-before-completion`), histórico da análise de bootstrap e
   tasks futuras versionadas (TASK-INFRA-001 a 006).
-- Stack de desenvolvimento EXISTENTE em `compose/docker-compose.dev.yml`
-  (TASK-INFRA-001), validado em 2026-09-26: todos os serviços healthy,
+- Stack de desenvolvimento em `compose/docker-compose.dev.yml`, validado em
+  2026-09-26: todos os serviços de longa duração healthy,
   `scripts/smoke.sh` exit 0, isolamento da `radar-net` provado (internal,
   sem portas, inalcançável do host e de container fora da rede) e SMTP
-  STARTTLS+auth testado ponta a ponta contra o Mailpit. Artefatos do
-  mesmo change set: `env/.env.dev.example` (cobre todas as
+  STARTTLS+auth testado ponta a ponta contra o Mailpit. Arquivos de suporte:
+  `README.md` (setup dev e requisito de hosts do upload direto),
+  `env/.env.dev.example` (cobre todas as
   `${VAR:?}` do compose; placeholders apenas), `scripts/up-dev.sh`,
-  `scripts/smoke.sh`, `scripts/gen-dev-certs.sh` e `docs/networks.md`.
+  `scripts/init-rustfs.sh`, `scripts/smoke.sh`, `scripts/gen-dev-certs.sh` e
+  `docs/networks.md`.
   O perfil `prodlike` (`front-prod`) NÃO foi criado — bloqueado pela
   TASK-INFRA-002; o serviço está documentado como planejado no YAML e no
-  doc. Dependência nova descoberta na execução: TASK-INFRA-006
-  (repo Backend_Java — URL pública de foto contra emulador S3 local).
-  O change set inteiro ainda está SEM commit (repositório sem histórico;
-  Git é do operador — enquanto não commitado, os artefatos valem para a
-  máquina local, não para clones).
+  doc. A URL pública de fotos contra o emulador S3 local continua bloqueada
+  pela validação do Backend, com dependência registrada na TASK-INFRA-006
+  do repo `Backend_Java`.
+- `scripts/up-dev.sh` inicia RustFS antes do restante do stack, confirma seu
+  attachment à rede default do projeto e recria somente o container RustFS
+  se a rede estiver ausente, preservando `rustfs-data`. O job
+  `rustfs-init` usa `scripts/init-rustfs.sh` read-only, espera o endpoint
+  `rustfs:9000` com até 15 tentativas separadas por 2 segundos e o launcher
+  imprime os logs do job caso a subida completa falhe.
 - Ainda NÃO existem neste repo: `compose/docker-compose.e2e.yml` e
   `docker-compose.prod.yml`, `env/.env.prod.example`, `cloudflare/`,
   `scripts/e2e-run.sh`, `docs/deploy-dokploy.md`, `docs/rollback.md`,
