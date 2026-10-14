@@ -1,6 +1,6 @@
 # Estado atual
 
-Fotografia factual de 2026-09-29. Não é cronologia de tasks.
+Fotografia factual de 2026-10-10. Não é cronologia de tasks.
 
 ## O que existe
 
@@ -14,7 +14,7 @@ Fotografia factual de 2026-09-29. Não é cronologia de tasks.
   documentação oficial), 6 skills canônicas (`compose-infra`,
   `cloudflare-edge`, `dokploy-deploy`, `cicd-ghcr`, `secrets-env`,
   `verification-before-completion`), histórico da análise de bootstrap e
-  tasks futuras versionadas (TASK-INFRA-001 a 006).
+  planejamento local de tasks futuras (TASK-INFRA-001 a 006).
 - Stack de desenvolvimento em `compose/docker-compose.dev.yml`, validado em
   2026-09-26: todos os serviços de longa duração healthy,
   `scripts/smoke.sh` exit 0, isolamento da `radar-net` provado (internal,
@@ -30,6 +30,14 @@ Fotografia factual de 2026-09-29. Não é cronologia de tasks.
   doc. A URL pública de fotos contra o emulador S3 local continua bloqueada
   pela validação do Backend, com dependência registrada na TASK-INFRA-006
   do repo `Backend_Java`.
+- Existe `scripts/seed-admin-dev.sh` para o stack local: ele semeia, em uma
+  transação, o usuário de teste, o vínculo `ATIVO` na organização
+  `PLATAFORMA`, o papel `ADMIN_NEGOCIO`/`PLATAFORMA` e as nove capacidades
+  administrativas de plataforma. A senha do fixture vem de
+  `ADMIN_DEV_PASSWORD` no ambiente local ignorado e não é impressa. O fixture
+  continua somente de dev e não cria `perfil_usuario` (fonte do artefato:
+  `scripts/seed-admin-dev.sh:84-229`;
+  schema/contratos: `Backend_Java/src/main/resources/db/migration/V2__autenticacao_autorizacao.sql:109-145,376-424`).
 - `scripts/up-dev.sh` inicia RustFS antes do restante do stack, confirma seu
   attachment à rede default do projeto e recria somente o container RustFS
   se a rede estiver ausente, preservando `rustfs-data`. O job

@@ -15,7 +15,10 @@ primeira subida:
 2. Garanta que `Radar_Middleware_Python/.env` esteja configurado localmente;
    ele contém as credenciais do R2 de teste e não deve ser copiado para este
    repositório.
-3. Execute na raiz deste repositório:
+3. Em `env/.env.dev`, defina também `ADMIN_DEV_PASSWORD` com uma senha
+   exclusiva para o admin local. O valor é usado somente pelo seed ignorado e
+   nunca é impresso ou versionado.
+4. Execute na raiz deste repositório:
 
    ```bash
    scripts/up-dev.sh
