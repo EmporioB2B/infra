@@ -11,7 +11,9 @@ Os repositórios `infra`, `Backend_Java`, `Front_Angular` e
 primeira subida:
 
 1. Copie `env/.env.dev.example` para `env/.env.dev` e preencha os valores
-   locais exigidos. Não versione o arquivo real.
+   locais exigidos, incluindo o par dedicado
+   `RUSTFS_READ_ONLY_QUARANTINE_{ACCESS_KEY,SECRET_KEY}`. Não versione o
+   arquivo real.
 2. Garanta que `Radar_Middleware_Python/.env` esteja configurado localmente;
    ele contém as credenciais do R2 de teste e não deve ser copiado para este
    repositório.

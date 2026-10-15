@@ -1,6 +1,6 @@
 # Estado atual
 
-Fotografia factual de 2026-10-10. Não é cronologia de tasks.
+Fotografia factual de 2026-10-14. Não é cronologia de tasks.
 
 ## O que existe
 
@@ -16,10 +16,9 @@ Fotografia factual de 2026-10-10. Não é cronologia de tasks.
   `verification-before-completion`), histórico da análise de bootstrap e
   planejamento local de tasks futuras (TASK-INFRA-001 a 006).
 - Stack de desenvolvimento em `compose/docker-compose.dev.yml`, validado em
-  2026-09-26: todos os serviços de longa duração healthy,
-  `scripts/smoke.sh` exit 0, isolamento da `radar-net` provado (internal,
-  sem portas, inalcançável do host e de container fora da rede) e SMTP
-  STARTTLS+auth testado ponta a ponta contra o Mailpit. Arquivos de suporte:
+  2026-10-14 após a inclusão da credencial dedicada: todos os serviços de
+  longa duração healthy, `scripts/smoke.sh` exit 0, policy dedicada testada,
+  isolamento da `radar-net` provado e SMTP dev preservado. Arquivos de suporte:
   `README.md` (setup dev e requisito de hosts do upload direto),
   `env/.env.dev.example` (cobre todas as
   `${VAR:?}` do compose; placeholders apenas), `scripts/up-dev.sh`,
@@ -41,9 +40,13 @@ Fotografia factual de 2026-10-10. Não é cronologia de tasks.
 - `scripts/up-dev.sh` inicia RustFS antes do restante do stack, confirma seu
   attachment à rede default do projeto e recria somente o container RustFS
   se a rede estiver ausente, preservando `rustfs-data`. O job
-  `rustfs-init` usa `scripts/init-rustfs.sh` read-only, espera o endpoint
+  `rustfs-init` usa `scripts/init-rustfs.sh` read-only, cria as credenciais
+  read-only geral e dedicada da quarentena, espera o endpoint
   `rustfs:9000` com até 15 tentativas separadas por 2 segundos e o launcher
   imprime os logs do job caso a subida completa falhe.
+- [PLANEJADO — produção] `docs/storage-r2-handoff.md` descreve a credencial
+  dedicada, prefixo `quarantine/`, policy somente `s3:GetObject` e CORS
+  `GET`/`HEAD`; não há aplicação no R2, Cloudflare ou Dokploy.
 - Ainda NÃO existem neste repo: `compose/docker-compose.e2e.yml` e
   `docker-compose.prod.yml`, `env/.env.prod.example`, `cloudflare/`,
   `scripts/e2e-run.sh`, `docs/deploy-dokploy.md`, `docs/rollback.md`,
@@ -53,9 +56,10 @@ Fotografia factual de 2026-10-10. Não é cronologia de tasks.
   (Back: temurin 25 + usuário não-root + healthcheck em 8081; Front: SSR
   node:22 porta 4000; Radar: python 3.12 slim porta 8000 sem portas
   publicadas).
-- Overrides de dev maduros no repo do Back: `docker-compose.yml`
+- [EXISTENTE] Overrides de dev maduros no repo do Back: `docker-compose.yml`
   (backend + postgres-dev + postgres-test), `docker-compose.rustfs.yml`
-  (R2 local com bootstrap idempotente de buckets e credencial read-only) e
+  (R2 local com bootstrap idempotente de buckets e credenciais read-only
+  geral/dedicada da quarentena) e
   `docker-compose.test.yml` — o `docker-compose.dev.yml` deste repo
   espelha o override RustFS do Back (único desvio: política anônima no
   bucket público, dev-only).
@@ -97,7 +101,9 @@ Fotografia factual de 2026-10-10. Não é cronologia de tasks.
   aguardando apenas o commit do operador — o repositório ainda não tem
   histórico, logo os artefatos valem para esta máquina mas não para
   clones; 002 abre dependências no repo Front; 003/004/005 não
-  iniciadas; 006 é dependência de código no repo Backend_Java.
+  iniciadas; 006 é dependência de código no repo Backend_Java. TASK-INFRA-009
+  tem wiring dev e gates runtime validados em 2026-10-14; o handoff
+  [PLANEJADO — produção] continua sem aplicação no R2.
 - Backlog futuro (não bloqueia o MVP de deploy): mTLS/gateway interno do
   Radar (TASK-080/006 no repo Back e TASK-006 no repo Radar), staging,
   monitoramento/uptime, backup do Supabase, entrada do Hermes no stack,

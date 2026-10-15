@@ -12,7 +12,10 @@
 #   6. health do RustFS + três buckets presentes (via one-shot rc);
 #   7. bucket público lê anonimamente (fotos do navegador);
 #   8. bucket privado/quarentena NEGAM leitura anônima (403);
-#   9. preflight CORS permite o PUT directo do navegador (:4200 → :9000).
+#   9. preflight CORS permite o PUT directo do navegador (:4200 → :9000);
+#  10. CORS do bucket de quarentena mantém GET e HEAD nas origens dev;
+#  11. credencial dedicada lê só o prefixo de quarentena e nega alterações,
+#      listagem e leitura privada.
 #
 # Exit != 0 na primeira falha reportada (continua os demais checks para dar
 # o panorama completo).
@@ -81,6 +84,11 @@ BUCKETS="$(
       rc ls local/quarantine-local >/dev/null 2>&1 && rc ls local/private-local >/dev/null 2>&1 && rc ls local/public-local >/dev/null 2>&1 || exit 1
       printf smoke > /tmp/marker
       rc cp --quiet /tmp/marker local/public-local/public/smoke-check.txt >/dev/null 2>&1 || exit 1
+      printf quarantine > /tmp/quarantine-marker
+      rc cp --quiet /tmp/quarantine-marker local/quarantine-local/quarantine/smoke-policy-check.txt >/dev/null 2>&1 || exit 1
+      printf outside > /tmp/outside-marker
+      rc cp --quiet /tmp/outside-marker local/quarantine-local/outside/smoke-policy-check.txt >/dev/null 2>&1 || exit 1
+      rc cp --quiet /tmp/outside-marker local/private-local/private/smoke-policy-check.txt >/dev/null 2>&1 || exit 1
       echo present
     ' 2>/dev/null || true
 )"
@@ -119,6 +127,77 @@ if printf '%s' "$PREFLIGHT" | grep -qi '^access-control-allow-origin: *http://lo
   ok "cors: preflight OPTIONS autoriza PUT da origem http://localhost:4200"
 else
   bad "cors: preflight sem ACAO esperada (init aplicou o CORS XML?)"
+fi
+
+# O endpoint novo devolve leitura pré-assinada; validar explicitamente que o
+# bucket de quarentena continua aceitando os métodos de leitura para todas as
+# origens locais configuradas no init. Nenhuma credencial é usada aqui.
+for origin in http://localhost:4200 http://localhost:4000 http://127.0.0.1:4200; do
+  for method in GET HEAD; do
+    READ_PREFLIGHT="$(curl -s -o /dev/null -D - --max-time 5 --resolve rustfs:9000:127.0.0.1 \
+      -X OPTIONS 'http://rustfs:9000/quarantine-local/cors-read-probe' \
+      -H "Origin: $origin" \
+      -H "Access-Control-Request-Method: $method" \
+      || true)"
+    if printf '%s' "$READ_PREFLIGHT" \
+      | grep -Fqi "access-control-allow-origin: $origin" \
+      && printf '%s' "$READ_PREFLIGHT" \
+        | grep -Fi 'access-control-allow-methods:' \
+        | grep -Fqi "$method"; then
+      ok "cors: quarentena autoriza $method para $origin"
+    else
+      bad "cors: quarentena não autoriza $method para $origin"
+    fi
+  done
+done
+
+# 11. policy efetiva da credencial dedicada. O bucket público não é testado
+# aqui de forma negativa: no dev ele é deliberadamente anônimo; isso é uma
+# regra independente da policy desta credencial.
+POLICY_CHECK="$(
+  docker run --rm --network "$NET" \
+    --env-file "$ENV_FILE" \
+    --entrypoint /bin/sh "$RC_IMAGE" -c '
+      rc alias set --quiet --region "${RUSTFS_REGION:-us-east-1}" --bucket-lookup path \
+        quarantine http://rustfs:9000 "$RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY" \
+        "$RUSTFS_READ_ONLY_QUARANTINE_SECRET_KEY" >/dev/null 2>&1 || exit 1
+      rc cp --quiet quarantine/quarantine-local/quarantine/smoke-policy-check.txt \
+        /tmp/quarantine-read >/dev/null 2>&1
+      get_status=$?
+      if test "$(cat /tmp/quarantine-read 2>/dev/null)" = quarantine; then
+        content_status=0
+      else
+        content_status=1
+      fi
+      rc ls --quiet quarantine/quarantine-local >/dev/null 2>&1
+      list_status=$?
+      printf denied > /tmp/quarantine-denied
+      rc cp --quiet /tmp/quarantine-denied \
+        quarantine/quarantine-local/quarantine/smoke-policy-denied.txt >/dev/null 2>&1
+      put_status=$?
+      rc rm --quiet quarantine/quarantine-local/quarantine/smoke-policy-check.txt \
+        >/dev/null 2>&1
+      delete_status=$?
+      rc cp --quiet quarantine/quarantine-local/outside/smoke-policy-check.txt \
+        /tmp/outside-read >/dev/null 2>&1
+      outside_status=$?
+      rc cp --quiet quarantine/private-local/private/smoke-policy-check.txt \
+        /tmp/private-read >/dev/null 2>&1
+      private_status=$?
+      if [ "$get_status" -eq 0 ] && [ "$content_status" -eq 0 ] \
+        && [ "$list_status" -ne 0 ] \
+        && [ "$put_status" -ne 0 ] && [ "$delete_status" -ne 0 ] \
+        && [ "$outside_status" -ne 0 ] && [ "$private_status" -ne 0 ]; then
+        printf policy-ok
+      else
+        exit 1
+      fi
+    ' 2>/dev/null
+)"
+if [[ "$POLICY_CHECK" == "policy-ok" ]]; then
+  ok "rustfs: credencial dedicada limitada a GetObject em quarantine/"
+else
+  bad "rustfs: policy da credencial dedicada não passou os testes negativos"
 fi
 
 echo

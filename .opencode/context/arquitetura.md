@@ -62,9 +62,9 @@ para R2/ViaCEP.
 
 Mesma topologia de redes da produção, com emuladores no lugar dos serviços
 externos e sem cloudflared. Implementado em
-`compose/docker-compose.dev.yml` (stack validado em 2026-09-26: todos os
-serviços healthy, `scripts/smoke.sh` exit 0, isolamento da `radar-net`
-provado; detalhes de portas/publicação em `docs/networks.md`):
+`compose/docker-compose.dev.yml`, validado em 2026-10-14 após a inclusão das
+novas credenciais: serviços healthy, `scripts/smoke.sh` exit 0 e isolamento da
+`radar-net` provado. Detalhes de portas/publicação em `docs/networks.md`:
 
 ```text
 services:
@@ -77,7 +77,7 @@ services:
   mailpit    SMTP com STARTTLS+auth; UI               127.0.0.1:8025
   front-dev  Dockerfile-dev (ng serve + proxy)        127.0.0.1:4200
   front-prod profile "prodlike": imagem SSR de        127.0.0.1:4000
-             produção — PLANEJADO, ainda não existe no compose
+              produção — [PLANEJADO], ainda não existe no compose
              (bloqueado pela TASK-INFRA-002; ver docs/networks.md)
 
 networks:
@@ -113,6 +113,14 @@ volumes:
   versionado; o profile `prod` usa o cacerts padrão com provedor real.
 - Em dev HTTP puro, `APP_AUTH_COOKIE_SECURE` precisa do override explícito
   `false` no compose (o profile `container` defaulta `true` — `servicos.md`).
+- O RustFS mantém a quarentena sem leitura anônima. O `rustfs-init` cria uma
+  credencial dedicada ao Backend para `s3:GetObject` apenas em
+  `quarantine-local/quarantine/*`; a policy não concede listagem, escrita,
+  deleção ou recursos dos buckets privado/público; a leitura anônima dev-only
+  do bucket público é uma regra independente. O CORS de GET/HEAD é aplicado
+  também à quarentena e coberto pelo smoke nas origens locais permitidas.
+- [PLANEJADO — produção] O equivalente de produção está descrito em
+  `docs/storage-r2-handoff.md`, sem aplicação no R2, Cloudflare ou Dokploy.
 
 ## Cadeia CI/CD
 
@@ -160,6 +168,7 @@ infra/
     up-dev.sh  init-rustfs.sh  smoke.sh  e2e-run.sh
   docs/
     deploy-dokploy.md  networks.md  rollback.md  cicd.md
+    storage-r2-handoff.md
   .github/workflows/
     validate.yml  integration.yml
 ```

@@ -13,6 +13,8 @@
 # em Backend_Java (Dockerfile, application-container.yml,
 # docker-compose.rustfs.yml), Radar_Middleware_Python (Dockerfile,
 # docker-compose.yml) e Front_Angular (Dockerfile-dev, proxy.conf.json).
+# As credenciais dedicadas de quarentena foram conferidas no change set do
+# Backend de 2026-10-14.
 #
 # Validação: docker compose --env-file env/.env.dev \
 #              -f compose/docker-compose.dev.yml config --quiet
@@ -97,12 +99,14 @@ services:
       APP_STORAGE_READ_ONLY_R2_ENDPOINT: http://rustfs:9000
       APP_STORAGE_READ_ONLY_R2_ACCESS_KEY_ID: ${RUSTFS_READ_ONLY_ACCESS_KEY:?RUSTFS_READ_ONLY_ACCESS_KEY obrigatória}
       APP_STORAGE_READ_ONLY_R2_SECRET_ACCESS_KEY: ${RUSTFS_READ_ONLY_SECRET_KEY:?RUSTFS_READ_ONLY_SECRET_KEY obrigatória}
+      APP_STORAGE_READ_ONLY_QUARENTENA_R2_ENDPOINT: http://rustfs:9000
+      APP_STORAGE_READ_ONLY_QUARENTENA_R2_ACCESS_KEY_ID: ${RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY:?RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY obrigatória}
+      APP_STORAGE_READ_ONLY_QUARENTENA_R2_SECRET_ACCESS_KEY: ${RUSTFS_READ_ONLY_QUARANTINE_SECRET_KEY:?RUSTFS_READ_ONLY_QUARANTINE_SECRET_KEY obrigatória}
       APP_STORAGE_R2_QUARENTENA_BUCKET: quarantine-local
       APP_STORAGE_R2_PRIVADO_BUCKET: private-local
       APP_STORAGE_R2_PUBLICO_BUCKET: public-local
       APP_STORAGE_R2_QUARENTENA_PREFIX: quarantine/
       APP_STORAGE_R2_PRIVADO_PREFIX: private/
-      APP_STORAGE_R2_PUBLICO_PREFIX: public/
       APP_STORAGE_R2_REGION: ${RUSTFS_REGION:-us-east-1}
       # publicUrl do Back = base + "/" + storageKey (R2StorageProvider.java)
       # e StorageProperties.publicBaseUrlIsSafe PROÍBE path na base (só
@@ -251,6 +255,8 @@ services:
       RUSTFS_REGION: ${RUSTFS_REGION:-us-east-1}
       RUSTFS_READ_ONLY_ACCESS_KEY: ${RUSTFS_READ_ONLY_ACCESS_KEY:?RUSTFS_READ_ONLY_ACCESS_KEY obrigatória}
       RUSTFS_READ_ONLY_SECRET_KEY: ${RUSTFS_READ_ONLY_SECRET_KEY:?RUSTFS_READ_ONLY_SECRET_KEY obrigatória}
+      RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY: ${RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY:?RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY obrigatória}
+      RUSTFS_READ_ONLY_QUARANTINE_SECRET_KEY: ${RUSTFS_READ_ONLY_QUARANTINE_SECRET_KEY:?RUSTFS_READ_ONLY_QUARANTINE_SECRET_KEY obrigatória}
     volumes:
       - ../scripts/init-rustfs.sh:/opt/emporio/init-rustfs.sh:ro
     entrypoint: ["/bin/sh", "/opt/emporio/init-rustfs.sh"]

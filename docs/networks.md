@@ -43,7 +43,14 @@ emuladores no lugar dos serviços externos e sem cloudflared.
 - RustFS (`:9000`) emula o R2 do Back — inclusive o bucket **público de
   fotos**, que no dev exige leitura anônima (política aplicada pelo
   `rustfs-init`, desvio documentado no YAML; em produção o público é
-  servido pela borda `media.emporiob2b.com.br`). O Radar **não** usa o
+  servido pela borda `media.emporiob2b.com.br`). A quarentena permanece
+  fechada para anônimos e tem uma credencial dedicada somente para
+  `s3:GetObject` em `quarantine-local/quarantine/*`; ela não lista nem grava
+  e não recebe recursos dos buckets privado/público. O acesso anônimo
+  dev-only do bucket público é uma regra independente. O CORS de GET/HEAD da
+  quarentena é verificado pelo `scripts/smoke.sh` para as três origens locais
+  configuradas.
+  O Radar **não** usa o
   RustFS: ele valida `https://<account>.r2.cloudflarestorage.com` e usa o
   bucket R2 de teste real via `env_file` do `.env` local do repo Radar.
 - A URL pública de foto gerada pelo Back (`publicUrl = base + key`) **não é

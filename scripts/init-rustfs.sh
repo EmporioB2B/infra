@@ -13,13 +13,22 @@ validate_credential() {
 
 case "$RUSTFS_ACCESS_KEY" in ''|*[!A-Za-z0-9]*) exit 1 ;; esac
 case "$RUSTFS_READ_ONLY_ACCESS_KEY" in ''|*[!A-Za-z0-9]*) exit 1 ;; esac
+case "$RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY" in ''|*[!A-Za-z0-9]*) exit 1 ;; esac
 [ "${#RUSTFS_ACCESS_KEY}" -ge 16 ] && [ "${#RUSTFS_ACCESS_KEY}" -le 128 ] || exit 1
 [ "${#RUSTFS_READ_ONLY_ACCESS_KEY}" -ge 16 ] && [ "${#RUSTFS_READ_ONLY_ACCESS_KEY}" -le 128 ] || exit 1
+[ "${#RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY}" -ge 16 ] && [ "${#RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY}" -le 128 ] || exit 1
 validate_credential "$RUSTFS_ACCESS_KEY"
 validate_credential "$RUSTFS_SECRET_KEY"
 validate_credential "$RUSTFS_READ_ONLY_ACCESS_KEY"
 validate_credential "$RUSTFS_READ_ONLY_SECRET_KEY"
-if [ "$RUSTFS_ACCESS_KEY" = "$RUSTFS_READ_ONLY_ACCESS_KEY" ] || [ "$RUSTFS_SECRET_KEY" = "$RUSTFS_READ_ONLY_SECRET_KEY" ]; then
+validate_credential "$RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY"
+validate_credential "$RUSTFS_READ_ONLY_QUARANTINE_SECRET_KEY"
+if [ "$RUSTFS_ACCESS_KEY" = "$RUSTFS_READ_ONLY_ACCESS_KEY" ] \
+  || [ "$RUSTFS_SECRET_KEY" = "$RUSTFS_READ_ONLY_SECRET_KEY" ] \
+  || [ "$RUSTFS_ACCESS_KEY" = "$RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY" ] \
+  || [ "$RUSTFS_SECRET_KEY" = "$RUSTFS_READ_ONLY_QUARANTINE_SECRET_KEY" ] \
+  || [ "$RUSTFS_READ_ONLY_ACCESS_KEY" = "$RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY" ] \
+  || [ "$RUSTFS_READ_ONLY_SECRET_KEY" = "$RUSTFS_READ_ONLY_QUARANTINE_SECRET_KEY" ]; then
   exit 1
 fi
 
@@ -45,6 +54,7 @@ rc mb --quiet --ignore-existing local/private-local
 rc mb --quiet --ignore-existing local/public-local
 
 printf '%s\n' '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject"],"Resource":["arn:aws:s3:::private-local/*","arn:aws:s3:::public-local/*"]}]}' > /tmp/emporio-storage-read-only.json
+printf '%s\n' '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject"],"Resource":["arn:aws:s3:::quarantine-local/quarantine/*"]}]}' > /tmp/emporio-storage-read-only-quarantine.json
 # Limpeza best-effort: os recursos podem ainda não existir e a imagem atual
 # não anuncia policy-detach; serão recriados logo abaixo. Não poluir o log com
 # falhas esperadas nem imprimir detalhes que possam conter dados de ambiente.
@@ -54,6 +64,16 @@ rc admin policy rm --quiet local emporio-storage-read-only >/dev/null 2>&1 || tr
 rc admin policy create --quiet local emporio-storage-read-only /tmp/emporio-storage-read-only.json
 rc admin user add --quiet local "$RUSTFS_READ_ONLY_ACCESS_KEY" "$RUSTFS_READ_ONLY_SECRET_KEY"
 rc admin policy attach --quiet local emporio-storage-read-only --user "$RUSTFS_READ_ONLY_ACCESS_KEY"
+
+# A credencial da quarentena é separada e não recebe ListBucket nem qualquer
+# permissão nos buckets privado/público. O prefixo coincide com
+# APP_STORAGE_R2_QUARENTENA_PREFIX no compose dev.
+rc admin policy detach --quiet local emporio-storage-read-only-quarantine --user "$RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY" >/dev/null 2>&1 || true
+rc admin user rm --quiet local "$RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY" >/dev/null 2>&1 || true
+rc admin policy rm --quiet local emporio-storage-read-only-quarantine >/dev/null 2>&1 || true
+rc admin policy create --quiet local emporio-storage-read-only-quarantine /tmp/emporio-storage-read-only-quarantine.json
+rc admin user add --quiet local "$RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY" "$RUSTFS_READ_ONLY_QUARANTINE_SECRET_KEY"
+rc admin policy attach --quiet local emporio-storage-read-only-quarantine --user "$RUSTFS_READ_ONLY_QUARANTINE_ACCESS_KEY"
 
 # Desvio dev-only: o navegador não envia credencial S3; somente o bucket
 # público permite leitura anônima. Quarentena e privado continuam fechados.

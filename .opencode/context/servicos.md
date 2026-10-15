@@ -1,7 +1,9 @@
 # Catálogo de serviços
 
-Fatos verificados nos repositórios em 2026-09-26 (commits da data). Este
-catálogo é a fonte canônica de nomes de env, portas e restrições para os
+Fatos baseline verificados nos repositórios em 2026-09-26 (commits da data),
+com o contrato de storage de quarentena revisado em 2026-10-14 no change set
+do Backend. Este catálogo é a fonte canônica de nomes de env, portas e
+restrições para os
 composes deste repositório. Rascunhos antigos (como o
 `docker-compose.yml` da raiz do workspace, que usava `DB_HOST`,
 `SECRET_JWT`, `R2_ENDPOINT`, `API_BASE_URL` etc.) não refletem o código e
@@ -31,8 +33,9 @@ estão aposentados.
     `APP_STORAGE_ALLOW_INSECURE_HTTP`,
     `APP_STORAGE_READ_WRITE_R2_{ENDPOINT,ACCESS_KEY_ID,SECRET_ACCESS_KEY}`,
     `APP_STORAGE_READ_ONLY_R2_{ENDPOINT,ACCESS_KEY_ID,SECRET_ACCESS_KEY}`,
+    `APP_STORAGE_READ_ONLY_QUARENTENA_R2_{ENDPOINT,ACCESS_KEY_ID,SECRET_ACCESS_KEY}`,
     `APP_STORAGE_R2_{QUARENTENA,PRIVADO,PUBLICO}_BUCKET`,
-    `APP_STORAGE_R2_{QUARENTENA,PRIVADO,PUBLICO}_PREFIX`,
+    `APP_STORAGE_R2_{QUARENTENA,PRIVADO}_PREFIX`,
     `APP_STORAGE_R2_REGION`, `APP_STORAGE_R2_PUBLICO_BASE_URL`,
     `APP_STORAGE_R2_PRESIGNED_{UPLOAD,READ}_TTL`,
     `APP_STORAGE_DIRECT_UPLOAD_MAX_BYTES`. Não existe
@@ -40,6 +43,9 @@ estão aposentados.
     antigo, nunca implementado; só a base única
     `APP_STORAGE_R2_PUBLICO_BASE_URL` é vinculada em
     `application.yml`/`application-dev.yml`).
+    O namespace público é fixo em `public/` por `StorageNamespace`;
+    `APP_STORAGE_R2_PUBLICO_PREFIX` não faz parte do compose e não é lida pelo
+    Backend.
   - Restrição da URL pública de foto: `StorageProperties.publicBaseUrlIsSafe`
     proíbe path na base do public-base-url (aceita apenas null, vazio ou
     `/`) e `R2StorageProvider.publicUrl()` compõe `base + "/" + storageKey`.
@@ -71,6 +77,18 @@ estão aposentados.
     `false`, senão o cookie de refresh não é aceito em `localhost`),
     `APP_AUTH_COOKIE_SAME_SITE` (default `Lax`; suficiente — front e api são
     same-site), `APP_AUTH_COOKIE_{NAME,HTTP_ONLY,PATH}`.
+  - [EXISTENTE — dev] A credencial
+    `APP_STORAGE_READ_ONLY_QUARENTENA_R2_*` é distinta das credenciais
+    read-write/read-only e serve apenas para presign de leitura no
+    bucket/prefixo de quarentena. No compose dev, o prefixo efetivo é
+    `quarantine/` (o fallback do `application.yml` sem override é `qa/`); no
+    RustFS dev a policy equivalente permite
+    somente `s3:GetObject` em `arn:aws:s3:::quarantine-local/quarantine/*`,
+    sem listagem, escrita, deleção ou recursos dos buckets privado/público; a
+    leitura anônima dev-only do bucket público é uma regra independente.
+  - [PLANEJADO — produção] O handoff de produção descreve a mesma credencial,
+    prefixo e policy mínima, mas não aplica alteração no R2, Cloudflare ou
+    Dokploy.
   - Rate limit por IP atrás de proxy: `VALIDACAO_CNPJ_TRUSTED_PROXIES`
     (produção: rede do túnel/containers).
 - Banco: dev/test `postgres:16-alpine` local; **produção Supabase externo**
@@ -139,7 +157,7 @@ estão aposentados.
 | Serviço | Papel | Notas |
 |---|---|---|
 | `postgres` (postgres:16-alpine) | banco do Back | prod usa Supabase; nunca subir em produção |
-| `rustfs` + `rustfs-init` | R2 do Back (quarentena, privado e **público de fotos**) | espelho do `docker-compose.rustfs.yml` do Back (`rustfs/rustfs:1.0.0-rc.6` + cliente `rustfs/rc:v0.1.30`); credencial read-only própria; console 9001 |
+| `rustfs` + `rustfs-init` | R2 do Back (quarentena, privado e **público de fotos**) | espelho do `docker-compose.rustfs.yml` do Back (`rustfs/rustfs:1.0.0-rc.6` + cliente `rustfs/rc:v0.1.30`); credencial read-only geral e credencial dedicada read-only da quarentena; console 9001 |
 | `mailpit` (`axllent/mailpit:v1.31.2`) | SMTP do Back + UI para links de email | `SMTP_HOST=mailpit`, porta 1025 interna (não publicada); UI 127.0.0.1:8025; healthcheck canônico `/mailpit readyz` |
 
 No `rustfs-init` do compose de dev, a política anônima do bucket público
