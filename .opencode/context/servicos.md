@@ -1,9 +1,7 @@
 # Catálogo de serviços
 
-Fatos baseline verificados nos repositórios em 2026-09-26 (commits da data),
-com o contrato de storage de quarentena revisado em 2026-10-14 no change set
-do Backend. Este catálogo é a fonte canônica de nomes de env, portas e
-restrições para os
+Fatos verificados nos repositórios irmãos e nos artefatos deste repo. Este
+catálogo é a fonte canônica de nomes de env, portas e restrições para os
 composes deste repositório. Rascunhos antigos (como o
 `docker-compose.yml` da raiz do workspace, que usava `DB_HOST`,
 `SECRET_JWT`, `R2_ENDPOINT`, `API_BASE_URL` etc.) não refletem o código e
@@ -43,19 +41,36 @@ estão aposentados.
     antigo, nunca implementado; só a base única
     `APP_STORAGE_R2_PUBLICO_BASE_URL` é vinculada em
     `application.yml`/`application-dev.yml`).
-    O namespace público é fixo em `public/` por `StorageNamespace`;
-    `APP_STORAGE_R2_PUBLICO_PREFIX` não faz parte do compose e não é lida pelo
-    Backend.
-  - Restrição da URL pública de foto: `StorageProperties.publicBaseUrlIsSafe`
-    proíbe path na base do public-base-url (aceita apenas null, vazio ou
-    `/`) e `R2StorageProvider.publicUrl()` compõe `base + "/" + storageKey`.
-    Em emulador S3 local sem vhost (RustFS) isso é um beco sem saída:
-    path-style exige o bucket no path (a validação proíbe) e vhost-style
-    retornou HTTP 403 (evidência 2026-09-26). O dev roda com a base vazia;
-    a URL pública de foto via emulador local é inviável enquanto o código
-    for este — dependência registrada em TASK-INFRA-006 (repo
-    Backend_Java). Em produção a base é o domínio custom da borda sem path
-    e não há bloqueio.
+    O namespace público é fixo em `public/` por `StorageNamespace`, e
+    `publicObjectPath` produz `public/asset/<SHA-256 da referência>`
+    (`Backend_Java/src/main/java/br/com/emporio/infrastructure/storage/StorageNamespace.java:15-40`).
+    `APP_STORAGE_R2_PUBLICO_PREFIX` não é lida pelo Backend e não é definida
+    pelo compose deste repo; o override RustFS do Backend ainda a contém como
+    variável inerte (`Backend_Java/docker-compose.rustfs.yml:19-23`).
+  - **Existente — dev:** `StorageProperties.publicBaseUrlIsSafe` proíbe path
+    na base do public-base-url (aceita apenas null, vazio ou `/`) e
+    `R2StorageProvider.publicUrl()` compõe `base + "/" + publicObjectPath(reference)`
+    (`Backend_Java/src/main/java/br/com/emporio/infrastructure/config/StorageProperties.java:324-330`;
+    `Backend_Java/src/main/java/br/com/emporio/infrastructure/storage/provider/R2StorageProvider.java:353-364`).
+    O `media-gateway` resolve a limitação do path-style do RustFS sem alterar
+    o contrato do Backend: no dev, a base default é
+    `APP_STORAGE_R2_PUBLICO_BASE_URL=http://localhost:9002` (com
+    `MEDIA_GATEWAY_PORT` opcional) e `/public/asset/...` é traduzido
+    internamente para `rustfs:9000/public-local/public/asset/...`.
+  - **Existente — dev:** `media-gateway` usa `nginx:1.27.5-alpine`, escuta
+    `80` no container e publica somente `127.0.0.1:9002` por default
+    (`MEDIA_GATEWAY_PORT` pode sobrescrever); o healthcheck é `/healthz`, a
+    configuração é somente-leitura e o serviço fica apenas na rede `default`.
+    Aceita `GET`/`HEAD` exclusivamente em `/public/asset/`, rejeita
+    escrita e não roteia buckets privado/quarentena ou listagem
+    (`compose/docker-compose.dev.yml:266-291`;
+    `compose/media-gateway.nginx.conf:16-37`; o teste de integração do Back
+    aguarda `/healthz` na porta 80 e confirma a URL pública opaca em
+    `Backend_Java/src/test/java/br/com/emporio/infrastructure/storage/provider/RustFsStorageIT.java:144-151,348-414`).
+  - **Planejado — produção:** a base será o domínio custom da borda, sem
+    path (`APP_STORAGE_R2_PUBLICO_BASE_URL=https://media.emporiob2b.com.br`),
+    e não haverá media-gateway na VPS; `media.emporiob2b.com.br` será servido
+    diretamente pelo bucket público R2.
   - Email: `APP_EMAIL_ENABLED`, `APP_EMAIL_HEALTH_ENABLED`, `SMTP_HOST`,
     `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `APP_EMAIL_FROM`,
     `APP_EMAIL_REPLY_TO`, `APP_EMAIL_MEDIA_BASE_URL` (default prod:
@@ -156,9 +171,10 @@ estão aposentados.
 
 | Serviço | Papel | Notas |
 |---|---|---|
-| `postgres` (postgres:16-alpine) | banco do Back | prod usa Supabase; nunca subir em produção |
-| `rustfs` + `rustfs-init` | R2 do Back (quarentena, privado e **público de fotos**) | espelho do `docker-compose.rustfs.yml` do Back (`rustfs/rustfs:1.0.0-rc.6` + cliente `rustfs/rc:v0.1.30`); credencial read-only geral e credencial dedicada read-only da quarentena; console 9001 |
-| `mailpit` (`axllent/mailpit:v1.31.2`) | SMTP do Back + UI para links de email | `SMTP_HOST=mailpit`, porta 1025 interna (não publicada); UI 127.0.0.1:8025; healthcheck canônico `/mailpit readyz` |
+| `postgres` (**existente — dev**, postgres:16-alpine) | banco do Back | prod usa Supabase; nunca subir em produção |
+| `rustfs` + `rustfs-init` (**existente — dev**) | R2 do Back (quarentena, privado e **público de fotos**) | espelho do `docker-compose.rustfs.yml` do Back (`rustfs/rustfs:1.0.0-rc.6` + cliente `rustfs/rc:v0.1.30`); credencial read-only geral e credencial dedicada read-only da quarentena; console 9001 |
+| `media-gateway` (**existente — dev**) | URL local de fotos públicas | `nginx:1.27.5-alpine`; container na porta 80, publicação default `127.0.0.1:9002`; health `/healthz`; `/public/asset/...` → `rustfs:9000/public-local/public/asset/...`; somente `GET`/`HEAD`; sem privado/quarentena/escrita/listagem |
+| `mailpit` (**existente — dev**, `axllent/mailpit:v1.31.2`) | SMTP do Back + UI para links de email | `SMTP_HOST=mailpit`, porta 1025 interna (não publicada); UI 127.0.0.1:8025; healthcheck canônico `/mailpit readyz` |
 
 No `rustfs-init` do compose de dev, a política anônima do bucket público
 usa `rc bucket anonymous set download` — a forma antiga `rc anonymous set`
@@ -172,7 +188,7 @@ de dev roda com `MP_SMTP_AUTH_ACCEPT_ANY=1` (aceita qualquer par de
 credenciais) e STARTTLS via `MP_SMTP_TLS_CERT`/`MP_SMTP_TLS_KEY` com o
 certificado gerado por `scripts/gen-dev-certs.sh`.
 
-O Radar **não** é emulado: usa o R2 de teste real (restrição do
+O Radar **existente — dev** não é emulado: usa o R2 de teste real (restrição do
 `config.py`).
 
 ## Hermes_Robo_Whats_Python

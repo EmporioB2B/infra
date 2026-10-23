@@ -1,8 +1,8 @@
 # Emporio B2B — compose de DESENVOLVIMENTO/INTEGRAÇÃO (TASK-INFRA-001)
 #
 # Ambiente local único "como se fosse produção": front, api, radar, postgres,
-# RustFS (R2 do Back, incluindo o bucket público de fotos) e Mailpit (SMTP),
-# com a mesma topologia de redes da produção (docs/networks.md).
+# RustFS (R2 do Back, incluindo o bucket público de fotos), media-gateway e
+# Mailpit (SMTP), com a mesma topologia de redes da produção (docs/networks.md).
 #
 # Uso (a partir da raiz deste repo; exige os repos irmãos como vizinhos):
 #   cp env/.env.dev.example env/.env.dev  # preencher (openssl rand)
@@ -108,22 +108,12 @@ services:
       APP_STORAGE_R2_QUARENTENA_PREFIX: quarantine/
       APP_STORAGE_R2_PRIVADO_PREFIX: private/
       APP_STORAGE_R2_REGION: ${RUSTFS_REGION:-us-east-1}
-      # publicUrl do Back = base + "/" + storageKey (R2StorageProvider.java)
-      # e StorageProperties.publicBaseUrlIsSafe PROÍBE path na base (só
-      # ""/null ou "/"). No RustFS local isso é um beco sem saída: a base
-      # precisa de path para o path-style (http://localhost:9000/public-local)
-      # e o vhost-style (http://public-local.localhost:9000) foi testado com
-      # evidência em 2026-09-26 → HTTP 403. Por isso o default fica VAZIO,
-      # igual ao override docker-compose.rustfs.yml do Back; `urlPublica()`
-      # lançará erro somente quando um admin publicar foto com URL pública.
-      # Dependência registrada: TASK-INFRA-006 (repo Backend_Java — permitir
-      # base com path para emuladores S3 locais OU implementar o
-      # dev-publico-base-url que o contexto já anunciava). Enquanto isso o
-      # smoke verifica o bucket público servindo anonimamente em path-style
-      # direto (http://localhost:9000/public-local/...), que funciona.
-      # Em produção a base é o domínio custom da borda sem path
-      # (https://media.emporiob2b.com.br) e não há bloqueio.
-      APP_STORAGE_R2_PUBLICO_BASE_URL: ${APP_STORAGE_R2_PUBLICO_BASE_URL:-}
+      # publicUrl do Back = base + "/" + storageKey (R2StorageProvider.java).
+      # A base não pode conter path; o media-gateway local traduz o namespace
+      # /public/asset/... para o path-style do bucket public-local no RustFS. A URL
+      # retornada ao navegador permanece em localhost, enquanto o Backend só
+      # conhece a base pública genérica.
+      APP_STORAGE_R2_PUBLICO_BASE_URL: ${APP_STORAGE_R2_PUBLICO_BASE_URL:-http://localhost:${MEDIA_GATEWAY_PORT:-9002}}
       # Email: capturado pelo Mailpit local (nada é entregue de verdade).
       # O Back exige SMTP "de verdade" quando habilitado (application.yml
       # hard-codeia auth=true + starttls.required=true +
@@ -158,6 +148,8 @@ services:
       mailpit:
         condition: service_healthy
       radar:
+        condition: service_healthy
+      media-gateway:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "2", "http://127.0.0.1:8081/actuator/health"]
@@ -263,6 +255,40 @@ services:
     networks:
       - default
     restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Gateway público local para mídia. O Backend compõe `base + storageKey`,
+  # portanto a base fica sem path (`http://localhost:<porta>`); o gateway
+  # traduz `/public/asset/...` para `/public-local/public/asset/...` dentro do
+  # RustFS. Somente leitura de assets públicos é aceita; buckets
+  # privado/quarentena, listagem e métodos de escrita não são roteados.
+  # ---------------------------------------------------------------------------
+  media-gateway:
+    image: nginx:1.27.5-alpine
+    volumes:
+      - ./media-gateway.nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "127.0.0.1:${MEDIA_GATEWAY_PORT:-9002}:80"
+    depends_on:
+      rustfs-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/healthz"]
+      interval: 5s
+      timeout: 3s
+      start_period: 5s
+      retries: 12
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    networks:
+      - default
+    logging: *dev-logging
 
   # ---------------------------------------------------------------------------
   # Mailpit — captura todo SMTP do Back; nada é entregue a caixas reais.

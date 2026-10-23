@@ -38,7 +38,7 @@
 | Tema | Decisão | Justificativa |
 |---|---|---|
 | Radar em dev | Usa o **bucket R2 de teste real** via `env_file` do `.env` local do repo Radar (não versionado) | `config.py` rejeita endpoint que não seja `https://<account>.r2.cloudflarestorage.com`; RustFS não é aceito pelo Radar |
-| R2 do Back em dev | **RustFS** local (quarentena/privado/público), espelho do override `docker-compose.rustfs.yml` do Back, com desvio dev-only de leitura anônima no público (ver `servicos.md`; URL pública via app ainda bloqueada — TASK-INFRA-006) | Emula os 3 buckets, inclusive o **público de fotos** pedido pelo operador |
+| R2 do Back em dev | **RustFS** local (quarentena/privado/público), espelho do override `docker-compose.rustfs.yml` do Back, com desvio dev-only de leitura anônima no público; o `media-gateway` local resolve a URL pública sem expor os outros buckets (ver `servicos.md`) | Emula os 3 buckets, inclusive o **público de fotos** pedido pelo operador |
 | SMTP em dev | **Mailpit** (UI em `127.0.0.1:8025`); precisa servir STARTTLS+auth — restrição de boot do Back com email habilitado (`servicos.md`); atendida com certificado dev + truststore (`scripts/gen-dev-certs.sh`) | Percorrer fluxos de email (confirmação, reset) sem provedor real |
 | Front em dev | `Dockerfile-dev` (ng serve + proxy) como padrão; imagem SSR de produção em profile `prodlike` para E2E "como se fosse produção" | Operador quer testar todos os percursos manualmente; `prodlike` depende das build-args do Front (task de pré-requisito) |
 | Nome do serviço api em dev | `backend` | `proxy.conf.json` do Front já aponta para `http://backend:8080`; evita mudança no repo Front |

@@ -107,4 +107,6 @@ compose ps
 echo
 echo "Stack de dev pronto. Smoke: scripts/smoke.sh"
 echo "Front: http://localhost:4200 | API: http://localhost:8080 (actuator 8081)"
+MEDIA_GATEWAY_BIND="$(compose port media-gateway 80 2>/dev/null || true)"
+echo "Media pública: http://${MEDIA_GATEWAY_BIND:-127.0.0.1:9002}/public/asset/"
 echo "Mailpit (emails): http://localhost:8025 | RustFS console: http://localhost:9001"

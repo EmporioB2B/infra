@@ -3,14 +3,14 @@
 Documento vivo da topologia alvo. Fatos por serviço (envs, portas, imagens)
 ficam em `servicos.md`; justificativas de escolha ficam em `decisoes.md`.
 
-## Domínios e borda Cloudflare
+## Domínios e borda Cloudflare (planejado — produção)
 
 ```text
 Browser ──HTTPS──> Cloudflare (CDN/WAF/edge, TLS termina aqui)
   ├─ emporiob2b.com.br       ──tunnel──> front:4000   (Angular SSR)
   ├─ api.emporiob2b.com.br   ──tunnel──> api:8080     (Spring Boot)
   └─ media.emporiob2b.com.br ──────────> bucket público R2 (custom domain;
-                                          não passa pela VPS)
+                                           sem gateway na VPS)
 ```
 
 - O túnel é iniciado pela VPS (outbound); nenhuma porta HTTP/HTTPS é
@@ -26,7 +26,7 @@ Browser ──HTTPS──> Cloudflare (CDN/WAF/edge, TLS termina aqui)
   (cross-origin) e já é o default do profile `prod` do Back.
 - A porta de management do Back (8081) nunca é roteada pelo túnel.
 
-## Produção (VPS + Dokploy)
+## Produção (VPS + Dokploy) (planejado)
 
 ```text
 Dokploy (painel) ── gerencia stack Compose do repo Infra (branch main)
@@ -60,11 +60,11 @@ para R2/ViaCEP.
 
 ## Desenvolvimento/integração (máquina local)
 
-Mesma topologia de redes da produção, com emuladores no lugar dos serviços
-externos e sem cloudflared. Implementado em
-`compose/docker-compose.dev.yml`, validado em 2026-10-14 após a inclusão das
-novas credenciais: serviços healthy, `scripts/smoke.sh` exit 0 e isolamento da
-`radar-net` provado. Detalhes de portas/publicação em `docs/networks.md`:
+**Existente — dev:** mesma topologia de redes da produção planejada, com
+emuladores no lugar dos serviços externos e sem cloudflared. Implementado em
+`compose/docker-compose.dev.yml`, com healthchecks, `scripts/smoke.sh`,
+isolamento da `radar-net` e `media-gateway` local para fotos públicas.
+Detalhes de portas/publicação em `docs/networks.md`:
 
 ```text
 services:
@@ -74,6 +74,8 @@ services:
              env_file local do Radar (R2 de teste)
   rustfs     emula R2 do Back (quarentena/privado/    127.0.0.1:9000/9001
               público de fotos) + rustfs-init
+  media-gateway  nginx para fotos públicas              127.0.0.1:9002 → :80
+                (default externo 9002; MEDIA_GATEWAY_PORT é opcional)
   mailpit    SMTP com STARTTLS+auth; UI               127.0.0.1:8025
   front-dev  Dockerfile-dev (ng serve + proxy)        127.0.0.1:4200
   front-prod profile "prodlike": imagem SSR de        127.0.0.1:4000
@@ -81,7 +83,8 @@ services:
              (bloqueado pela TASK-INFRA-002; ver docs/networks.md)
 
 networks:
-  default    front-dev ↔ backend ↔ emuladores (postgres, rustfs, mailpit)
+  default    front-dev ↔ backend ↔ emuladores (postgres, rustfs, media-gateway,
+             mailpit)
   radar-net  internal: exclusivamente backend ↔ radar
   egress     radar → R2 de teste / ViaCEP
 
@@ -96,15 +99,22 @@ volumes:
 - O Radar em dev usa o bucket R2 de teste real (credenciais no `.env` local
   do projeto Radar, nunca versionado): o `config.py` valida
   `https://<account>.r2.cloudflarestorage.com` e rejeita S3 local.
-- RustFS é o R2 do Back em dev, incluindo o bucket público de fotos. A
-  leitura anônima do bucket (desvio `rustfs-init` do dev) torna o emulador
-  verificável pelo `smoke.sh` em path-style direto
-  (`http://localhost:9000/public-local/…`), mas a URL pública que o Back
-  gera para o navegador é inviável contra o emulador: a validação do Back
-  proíbe path na base e o RustFS não resolve vhost (TASK-INFRA-006,
-  `servicos.md`). O `imageBaseUrl` do Front em dev hoje compila para
-  `http://localhost:8081` — não aponta para o emulador; o ponto fechado
-  fica com TASK-002/006.
+- **Existente — dev:** RustFS é o R2 do Back, incluindo o bucket público de
+  fotos. A leitura anônima do bucket (desvio `rustfs-init` dev-only) torna o
+  emulador verificável em path-style direto; o `media-gateway` traduz a base
+  pública default `APP_STORAGE_R2_PUBLICO_BASE_URL=http://localhost:9002` +
+  `/public/asset/...` para
+  `rustfs:9000/public-local/public/asset/...`. Assim, a base pública do Back
+  não contém path e a URL de foto gerada pela aplicação é utilizável no
+  navegador local. O gateway escuta na porta 80 do container, responde health
+  em `/healthz`, aceita apenas `GET`/`HEAD` em `/public/asset/` e não
+  encaminha privado, quarentena, raiz de bucket ou métodos de escrita (fontes:
+  `compose/docker-compose.dev.yml:266-291`,
+  `compose/media-gateway.nginx.conf:16-37`,
+  `env/.env.dev.example:59-65`).
+- **Existente — dev:** o `imageBaseUrl` do Front continua compilado conforme
+  o bundle do Front; o media-gateway atende a base pública configurada pelo
+  Back, não altera essa configuração do Front.
 - Mailpit: como o Back exige SMTP autenticado com STARTTLS obrigatório
   quando email está habilitado (`servicos.md`), o dev serve o Mailpit com
   STARTTLS usando um certificado autoassinado SAN=`mailpit` e monta um
@@ -119,8 +129,10 @@ volumes:
   deleção ou recursos dos buckets privado/público; a leitura anônima dev-only
   do bucket público é uma regra independente. O CORS de GET/HEAD é aplicado
   também à quarentena e coberto pelo smoke nas origens locais permitidas.
-- [PLANEJADO — produção] O equivalente de produção está descrito em
-  `docs/storage-r2-handoff.md`, sem aplicação no R2, Cloudflare ou Dokploy.
+- **Planejado — produção:** `APP_STORAGE_R2_PUBLICO_BASE_URL` será
+  `https://media.emporiob2b.com.br`; o domínio custom serve diretamente o
+  bucket público R2, sem `media-gateway` na VPS. O equivalente está descrito
+  em `docs/storage-r2-handoff.md`, sem aplicação no R2, Cloudflare ou Dokploy.
 
 ## Cadeia CI/CD
 

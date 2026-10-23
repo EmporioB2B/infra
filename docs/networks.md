@@ -7,10 +7,11 @@ emuladores no lugar dos serviços externos e sem cloudflared.
 ```text
                          ┌───────────────────────────────────────────┐
  host (navegador)        │  só 127.0.0.1 — nada exposto na LAN       │
-   :4200 front-dev ──────┤                                           │
-   :8080/:8081 backend ──┤   default (bridge)                        │
-   :9000/:9001 rustfs ───┤     front-dev ↔ backend ↔ postgres        │
-   :8025 mailpit (UI) ───┤     backend ↔ rustfs, mailpit             │
+    :4200 front-dev ──────┤                                           │
+    :8080/:8081 backend ──┤   default (bridge)                        │
+    :9002 media-gateway ──┤     front-dev ↔ backend ↔ postgres        │
+    :9000/:9001 rustfs ───┤     backend ↔ media-gateway ↔ rustfs       │
+    :8025 mailpit (UI) ───┤     backend ↔ rustfs, mailpit             │
                          │                                           │
                          │   egress (bridge)  ── internet:           │
                          │     radar → R2 de teste / ViaCEP          │
@@ -24,7 +25,7 @@ emuladores no lugar dos serviços externos e sem cloudflared.
 
 | Rede | Tipo | Membros | Regra |
 |---|---|---|---|
-| `default` | bridge | front-dev, backend, postgres, rustfs, mailpit | tráfego interno do stack; toda publicação no host é prefixada `127.0.0.1` |
+| `default` | bridge | front-dev, backend, postgres, rustfs, rustfs-init, media-gateway, mailpit | tráfego interno do stack; toda publicação no host é prefixada `127.0.0.1` |
 | `radar-net` | bridge **`internal: true`** | backend, radar | única via para a API privada do Radar; sem gateway — nada entra/sai dela pelo host nem por outras redes |
 | `egress` | bridge | radar | saída controlada para o R2 de teste real e ViaCEP |
 
@@ -53,14 +54,19 @@ emuladores no lugar dos serviços externos e sem cloudflared.
   O Radar **não** usa o
   RustFS: ele valida `https://<account>.r2.cloudflarestorage.com` e usa o
   bucket R2 de teste real via `env_file` do `.env` local do repo Radar.
-- A URL pública de foto gerada pelo Back (`publicUrl = base + key`) **não é
-  utilizável pelo navegador contra o RustFS**: a validação do Back proíbe
-  path na base e o RustFS não resolve vhost (evidências de 2026-09-26 no
-  comentário do compose). O dev roda com
-  `APP_STORAGE_R2_PUBLICO_BASE_URL` vazio e o bucket público é verificado
-  pelo `smoke.sh` em path-style direto (`http://localhost:9000/public-local/…`).
-  A lacuna do navegador está registrada como **TASK-INFRA-006**
-  (repo Backend_Java).
+- O `media-gateway` é a única URL pública de mídia usada pela aplicação no
+  dev: `APP_STORAGE_R2_PUBLICO_BASE_URL` defaulta para
+  `http://localhost:${MEDIA_GATEWAY_PORT}` (9002). Ele aceita somente
+  `GET`/`HEAD` em `/public/asset/` e traduz internamente para
+  `rustfs:9000/public-local/public/asset/`. A base do Backend não contém path,
+  respeitando `StorageProperties.publicBaseUrlIsSafe`.
+- O gateway só é publicado em `127.0.0.1`; o RustFS continua local e o
+  navegador ainda o acessa diretamente apenas para o upload pré-assinado,
+  cujo `Host` precisa ser `rustfs:9000` (ver seção abaixo). O gateway não
+  encaminha `/private`, `/quarantine`, a raiz do bucket, `/public/` sem
+  `/asset/` ou métodos de escrita. O healthcheck é `/healthz`.
+- Em produção não existe esse gateway: `media.emporiob2b.com.br` aponta
+  diretamente para o bucket público R2 na borda Cloudflare.
 
 ## Direct-upload no dev (navegador → RustFS)
 

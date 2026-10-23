@@ -1,6 +1,6 @@
 # Estado atual
 
-Fotografia factual de 2026-10-14. Não é cronologia de tasks.
+Fotografia factual vigente. Não é cronologia de tasks.
 
 ## O que existe
 
@@ -14,21 +14,31 @@ Fotografia factual de 2026-10-14. Não é cronologia de tasks.
   documentação oficial), 6 skills canônicas (`compose-infra`,
   `cloudflare-edge`, `dokploy-deploy`, `cicd-ghcr`, `secrets-env`,
   `verification-before-completion`), histórico da análise de bootstrap e
-  planejamento local de tasks futuras (TASK-INFRA-001 a 006).
-- Stack de desenvolvimento em `compose/docker-compose.dev.yml`, validado em
-  2026-10-14 após a inclusão da credencial dedicada: todos os serviços de
-  longa duração healthy, `scripts/smoke.sh` exit 0, policy dedicada testada,
-  isolamento da `radar-net` provado e SMTP dev preservado. Arquivos de suporte:
+  tarefas locais do operador em `.opencode/tasks/`.
+- **Existente — dev:** stack de desenvolvimento em
+  `compose/docker-compose.dev.yml`, com todos os serviços de longa duração,
+  `media-gateway` local para fotos públicas, `scripts/smoke.sh`, policy
+  dedicada, isolamento da `radar-net` e SMTP dev. Arquivos de suporte:
   `README.md` (setup dev e requisito de hosts do upload direto),
   `env/.env.dev.example` (cobre todas as
   `${VAR:?}` do compose; placeholders apenas), `scripts/up-dev.sh`,
   `scripts/init-rustfs.sh`, `scripts/smoke.sh`, `scripts/gen-dev-certs.sh` e
   `docs/networks.md`.
-  O perfil `prodlike` (`front-prod`) NÃO foi criado — bloqueado pela
-  TASK-INFRA-002; o serviço está documentado como planejado no YAML e no
-  doc. A URL pública de fotos contra o emulador S3 local continua bloqueada
-  pela validação do Backend, com dependência registrada na TASK-INFRA-006
-  do repo `Backend_Java`.
+- **Planejado — dev profile:** o perfil `prodlike` (`front-prod`) NÃO foi
+  criado — bloqueado pela TASK-INFRA-002; o serviço está documentado no YAML e no
+  doc.
+- **Existente — dev:** o `media-gateway` publica somente
+  `127.0.0.1:9002` por default (`MEDIA_GATEWAY_PORT` é opcional) e encaminha
+  `/public/asset/...` para `rustfs:9000/public-local/public/asset/...`; o
+  container escuta na porta 80, o health é `/healthz`, e somente `GET`/`HEAD`
+  são aceitos nesse namespace. Escrita, listagem, raiz, privado e quarentena
+  são rejeitados. O Backend recebe
+  `APP_STORAGE_R2_PUBLICO_BASE_URL=http://localhost:9002` em dev; a URL pública
+  de fotos é utilizável pelo navegador. O RustFS continua sendo acessado
+  diretamente pelo navegador apenas para upload pré-assinado, com o hostname
+  `rustfs:9000` (fontes: `compose/docker-compose.dev.yml:266-291`,
+  `compose/media-gateway.nginx.conf:16-37`,
+  `env/.env.dev.example:59-65`).
 - Existe `scripts/seed-admin-dev.sh` para o stack local: ele semeia, em uma
   transação, o usuário de teste, o vínculo `ATIVO` na organização
   `PLATAFORMA`, o papel `ADMIN_NEGOCIO`/`PLATAFORMA` e as nove capacidades
@@ -37,16 +47,19 @@ Fotografia factual de 2026-10-14. Não é cronologia de tasks.
   continua somente de dev e não cria `perfil_usuario` (fonte do artefato:
   `scripts/seed-admin-dev.sh:84-229`;
   schema/contratos: `Backend_Java/src/main/resources/db/migration/V2__autenticacao_autorizacao.sql:109-145,376-424`).
-- `scripts/up-dev.sh` inicia RustFS antes do restante do stack, confirma seu
+- **Existente — dev:** `scripts/up-dev.sh` inicia RustFS antes do restante do stack, confirma seu
   attachment à rede default do projeto e recria somente o container RustFS
   se a rede estiver ausente, preservando `rustfs-data`. O job
   `rustfs-init` usa `scripts/init-rustfs.sh` read-only, cria as credenciais
   read-only geral e dedicada da quarentena, espera o endpoint
   `rustfs:9000` com até 15 tentativas separadas por 2 segundos e o launcher
-  imprime os logs do job caso a subida completa falhe.
-- [PLANEJADO — produção] `docs/storage-r2-handoff.md` descreve a credencial
-  dedicada, prefixo `quarantine/`, policy somente `s3:GetObject` e CORS
-  `GET`/`HEAD`; não há aplicação no R2, Cloudflare ou Dokploy.
+  imprime os logs do job caso a subida completa falhe; o launcher também
+  anuncia a URL do `media-gateway` após a subida.
+- **Planejado — produção:** `APP_STORAGE_R2_PUBLICO_BASE_URL` aponta para
+  `https://media.emporiob2b.com.br`, servido diretamente pelo bucket público
+  R2, sem `media-gateway` na VPS. `docs/storage-r2-handoff.md` descreve a
+  credencial dedicada, prefixo `quarantine/`, policy somente `s3:GetObject` e
+  CORS `GET`/`HEAD`; não há aplicação no R2, Cloudflare ou Dokploy.
 - Ainda NÃO existem neste repo: `compose/docker-compose.e2e.yml` e
   `docker-compose.prod.yml`, `env/.env.prod.example`, `cloudflare/`,
   `scripts/e2e-run.sh`, `docs/deploy-dokploy.md`, `docs/rollback.md`,
@@ -56,13 +69,14 @@ Fotografia factual de 2026-10-14. Não é cronologia de tasks.
   (Back: temurin 25 + usuário não-root + healthcheck em 8081; Front: SSR
   node:22 porta 4000; Radar: python 3.12 slim porta 8000 sem portas
   publicadas).
-- [EXISTENTE] Overrides de dev maduros no repo do Back: `docker-compose.yml`
+- **Existente — Backend_Java:** Overrides de dev maduros no repo do Back: `docker-compose.yml`
   (backend + postgres-dev + postgres-test), `docker-compose.rustfs.yml`
   (R2 local com bootstrap idempotente de buckets e credenciais read-only
   geral/dedicada da quarentena) e
   `docker-compose.test.yml` — o `docker-compose.dev.yml` deste repo
-  espelha o override RustFS do Back (único desvio: política anônima no
-  bucket público, dev-only).
+  espelha o override RustFS do Back; além da política anônima dev-only no
+  bucket público, o repo Infra adiciona o `media-gateway` para contornar o
+  path-style na URL pública sem expor os outros buckets.
 - Rascunho `docker-compose.yml` na raiz do workspace (nome `ifra-vps`, com
   cloudflared + traefik): **não funcional** (nomes de env divergem do
   código; healthcheck da api aponta porta/path errados). Aposentado pela
@@ -88,21 +102,24 @@ Fotografia factual de 2026-10-14. Não é cronologia de tasks.
   não vazias e STARTTLS obrigatório + auth (propriedades fixas no
   `application.yml`) — em produção o provedor real precisa suportar
   STARTTLS+AUTH (`SMTP_PORT` configurável; default 587) (`servicos.md`).
-- A URL pública de foto gerada pelo Back é inviável contra emulador S3
-  local com path (validação proíbe) ou vhost (RustFS retorna 403) —
-  bloqueio registrado como TASK-INFRA-006; o dev roda com
-  `APP_STORAGE_R2_PUBLICO_BASE_URL` vazio.
+- **Existente — dev:** a validação do Backend continua proibindo path na base
+  pública (`StorageProperties.publicBaseUrlIsSafe`), mas o
+  `media-gateway` fornece a base sem path e traduz o namespace fixo
+  `public/asset/` para o bucket `public-local`; o dev agora recebe
+  `APP_STORAGE_R2_PUBLICO_BASE_URL=http://localhost:9002` por default.
 
 ## Pendências conhecidas
 
-- Tasks TASK-INFRA-001 a 006 (planejamento local em `../tasks/futuras/`,
-  não versionado desde 2026-09-26). Estado:
+- Tasks TASK-INFRA-001 a 006 (planejamento local; não versionado desde
+  2026-09-26). Estado:
   001 concluída e arquivada (`../passadas/20260926_TASK-INFRA-001-compose-dev-integrado.md`),
   aguardando apenas o commit do operador — o repositório ainda não tem
   histórico, logo os artefatos valem para esta máquina mas não para
   clones; 002 abre dependências no repo Front; 003/004/005 não
-  iniciadas; 006 é dependência de código no repo Backend_Java. TASK-INFRA-009
-  tem wiring dev e gates runtime validados em 2026-10-14; o handoff
+  iniciadas; o follow-up de TASK-INFRA-006 foi arquivado em
+  `../passadas/20261023_TASK-INFRA-006-followup-contrato-9002.md`; o gateway
+  dev vigente está implementado nos artefatos acima.
+  TASK-INFRA-009 tem wiring dev e gates runtime validados; o handoff
   [PLANEJADO — produção] continua sem aplicação no R2.
 - Backlog futuro (não bloqueia o MVP de deploy): mTLS/gateway interno do
   Radar (TASK-080/006 no repo Back e TASK-006 no repo Radar), staging,

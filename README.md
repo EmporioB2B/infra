@@ -2,7 +2,7 @@
 
 Este repositório contém o Compose de desenvolvimento integrado e a
 infraestrutura compartilhada do Emporio B2B. O stack local inclui Backend,
-Frontend, Radar, PostgreSQL, RustFS e Mailpit.
+Frontend, Radar, PostgreSQL, RustFS, media-gateway e Mailpit.
 
 ## Subir o ambiente local
 
@@ -30,6 +30,19 @@ primeira subida:
    atualizadas. O launcher verifica a configuração, inicia o RustFS e aguarda
    os serviços ficarem saudáveis. Para verificar o ambiente, execute
    `scripts/smoke.sh`.
+
+### Fotos públicas no navegador
+
+O Backend usa `http://localhost:9002` (porta padrão, configurável por
+`MEDIA_GATEWAY_PORT`) como base pública de mídia no dev. O
+`media-gateway` publica somente `/public/asset/...` e encaminha a leitura
+para `public-local/public/asset/...` no RustFS. Não use
+`http://localhost:9000/public-local` como `APP_STORAGE_R2_PUBLICO_BASE_URL`:
+essa URL contém o path do bucket e é rejeitada pela validação do Backend.
+
+O acesso direto ao RustFS em `:9000` continua necessário somente para o upload
+pré-assinado; siga a configuração de `hosts` abaixo para que o navegador
+resolva o hostname `rustfs` assinado pelo Backend.
 
 ## Obrigatório para upload direto do navegador ao RustFS
 
