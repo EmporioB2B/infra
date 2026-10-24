@@ -19,6 +19,7 @@ conteúdo das skills.
 | `cloudflare-edge` | túnel, DNS, domínios, headers encaminhados, media/R2, cookies/CORS de borda | ativa |
 | `dokploy-deploy` | deploy, redeploy, rollback, envs/segredos no painel, hardening da VPS, stack compose | ativa |
 | `cicd-ghcr` | workflows GitHub Actions, build/push de imagens, GHCR, trigger de deploy | ativa |
+| `observability-logs` | stdout/stderr, Docker logging driver, Vector, Loki, Grafana e Grafana Cloud | ativa |
 
 ## Fronteiras de seleção
 

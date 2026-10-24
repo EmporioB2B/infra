@@ -1,0 +1,43 @@
+data_dir = "/var/lib/vector"
+
+[api]
+enabled = true
+address = "0.0.0.0:8686"
+
+[sources.docker_fluent]
+type = "fluent"
+address = "0.0.0.0:24224"
+mode = "tcp"
+
+[transforms.parse_ecs]
+type = "remap"
+inputs = ["docker_fluent"]
+source = '''
+raw = .log
+structured = parse_json(raw) ?? {}
+if is_object(structured) {
+  . = merge!(., structured)
+} else {
+  .message = raw
+}
+'''
+
+[sinks.loki]
+type = "loki"
+inputs = ["parse_ecs"]
+endpoint = "http://loki:3100"
+compression = "snappy"
+out_of_order_action = "accept"
+
+[sinks.loki.encoding]
+codec = "json"
+
+[sinks.loki.labels]
+environment = "dev"
+container = "{{ container_name }}"
+source = "docker"
+
+[sinks.loki.buffer]
+type = "disk"
+max_size = 268435488
+when_full = "block"

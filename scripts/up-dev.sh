@@ -8,8 +8,8 @@
 # Pré-checagens: daemon Docker, env/.env.dev presente (segredos locais de
 # dev), .env local do Radar presente (credenciais do R2 de teste — o arquivo
 # NÃO é lido nem copiado), repos irmãos vizinhos e `config --quiet` verde.
-# Depois: aguarda RustFS, corrige attachment ausente, então faz build
-# (opcional via --no-build) + up -d --wait de toda a stack.
+# Depois: aguarda Loki/Vector/Grafana e RustFS, corrige attachment ausente,
+# então faz build (opcional via --no-build) + up -d --wait de toda a stack.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -82,6 +82,9 @@ bash "$ROOT/scripts/gen-dev-certs.sh"
 echo "==> validando compose (config --quiet)"
 compose config --quiet
 
+echo "==> subindo e aguardando observabilidade local"
+compose up -d --wait --wait-timeout 120 loki vector grafana
+
 echo "==> subindo e aguardando RustFS antes do bootstrap dependente"
 compose up -d "${BUILD_FLAG[@]}" --wait --wait-timeout 120 rustfs
 ensure_rustfs_network
@@ -110,3 +113,4 @@ echo "Front: http://localhost:4200 | API: http://localhost:8080 (actuator 8081)"
 MEDIA_GATEWAY_BIND="$(compose port media-gateway 80 2>/dev/null || true)"
 echo "Media pública: http://${MEDIA_GATEWAY_BIND:-127.0.0.1:9002}/public/asset/"
 echo "Mailpit (emails): http://localhost:8025 | RustFS console: http://localhost:9001"
+echo "Grafana (logs): http://127.0.0.1:${GRAFANA_PORT:-3000}"

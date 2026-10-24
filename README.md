@@ -2,7 +2,8 @@
 
 Este repositório contém o Compose de desenvolvimento integrado e a
 infraestrutura compartilhada do Emporio B2B. O stack local inclui Backend,
-Frontend, Radar, PostgreSQL, RustFS, media-gateway e Mailpit.
+Frontend, Radar, PostgreSQL, RustFS, media-gateway, Mailpit e observabilidade
+local com Vector, Loki e Grafana.
 
 ## Subir o ambiente local
 
@@ -11,7 +12,7 @@ Os repositórios `infra`, `Backend_Java`, `Front_Angular` e
 primeira subida:
 
 1. Copie `env/.env.dev.example` para `env/.env.dev` e preencha os valores
-   locais exigidos, incluindo o par dedicado
+   locais exigidos, incluindo a senha da UI do Grafana e o par dedicado
    `RUSTFS_READ_ONLY_QUARANTINE_{ACCESS_KEY,SECRET_KEY}`. Não versione o
    arquivo real.
 2. Garanta que `Radar_Middleware_Python/.env` esteja configurado localmente;
@@ -105,3 +106,15 @@ isso, um smoke verde não prova que o navegador do host possui este mapeamento.
 Este requisito é somente para o Compose local de desenvolvimento. Consulte
 [`docs/networks.md`](docs/networks.md) para detalhes das redes e do upload
 direto.
+
+## Logs no Grafana local
+
+O bootstrap já sobe a observabilidade local e imprime a URL da UI:
+
+```text
+http://127.0.0.1:3000
+```
+
+O login usa `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD` do env local. O
+datasource Loki já vem provisionado; consulte [`docs/observability.md`](docs/observability.md)
+para as queries e para o procedimento de produção via Grafana Cloud/Dokploy.

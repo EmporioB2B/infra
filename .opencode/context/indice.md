@@ -18,6 +18,7 @@ contém ponteiros estáveis, não histórico de execução.
 | Escopo | Contextos |
 |---|---|
 | Escrever ou revisar compose | `arquitetura.md`, `servicos.md`, skill `compose-infra` |
+| Observabilidade e logs | `arquitetura.md`, `servicos.md`, `decisoes.md`, `estado_atual.md`, `docs/observability.md`, skill `observability-logs` |
 | Cloudflare, domínios, túnel, media/R2 | `arquitetura.md`, skill `cloudflare-edge` |
 | CI/CD, imagens e GHCR | `arquitetura.md`, skill `cicd-ghcr` |
 | Deploy, Dokploy e rollback | `decisoes.md`, skill `dokploy-deploy` |

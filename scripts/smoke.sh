@@ -7,17 +7,19 @@
 #   1. api actuator UP (127.0.0.1:8081);
 #   2. front dev-server responde (127.0.0.1:4200);
 #   3. UI do Mailpit responde (127.0.0.1:8025);
-#   4. media-gateway responde em loopback e publica somente /public/asset;
-#   5. radar /health/ready (via exec — não tem porta no host);
-#   6. backend alcança radar:8000 (rede radar-net);
-#   7. health do RustFS + três buckets presentes (via one-shot rc);
-#   8. bucket público lê anonimamente (fotos do navegador);
-#   9. bucket privado/quarentena NEGAM leitura anônima (403);
-#  10. media-gateway bloqueia buckets privados, listagem, escrita e paths fora
+#   4. Grafana responde em loopback e Loki está pronto;
+#   5. um label de container chega ao Loki via Vector;
+#   6. media-gateway responde em loopback e publica somente /public/asset;
+#   7. radar /health/ready (via exec — não tem porta no host);
+#   8. backend alcança radar:8000 (rede radar-net);
+#   9. health do RustFS + três buckets presentes (via one-shot rc);
+#  10. bucket público lê anonimamente (fotos do navegador);
+#  11. bucket privado/quarentena NEGAM leitura anônima (403);
+#  12. media-gateway bloqueia buckets privados, listagem, escrita e paths fora
 #      de /public/asset;
-#  11. preflight CORS permite o PUT directo do navegador (:4200 → :9000);
-#  12. CORS do bucket de quarentena mantém GET e HEAD nas origens dev;
-#  13. credencial dedicada lê só o prefixo de quarentena e nega alterações,
+#  13. preflight CORS permite o PUT directo do navegador (:4200 → :9000);
+#  14. CORS do bucket de quarentena mantém GET e HEAD nas origens dev;
+#  15. credencial dedicada lê só o prefixo de quarentena e nega alterações,
 #      listagem e leitura privada.
 #
 # Exit != 0 na primeira falha reportada (continua os demais checks para dar
@@ -35,6 +37,11 @@ NET="emporio-dev_default"
 compose() {
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
+
+if ! compose config --quiet; then
+  echo "ERRO: Compose inválido; confira env/.env.dev (incluindo GRAFANA_ADMIN_PASSWORD)." >&2
+  exit 1
+fi
 
 FAIL=0
 ok()   { printf 'OK   %s\n' "$*"; }
@@ -61,7 +68,32 @@ else
   bad "mailpit: UI sem resposta em 127.0.0.1:8025"
 fi
 
-# 4. media-gateway: a porta real vem do binding do Compose (default 9002).
+# 4. Grafana e Loki.
+GRAFANA_BIND="$(compose port grafana 3000 2>/dev/null || true)"
+if [[ -n "$GRAFANA_BIND" ]] && curl -fsS --max-time 5 -o /dev/null "http://$GRAFANA_BIND/api/health"; then
+  ok "grafana: API de health em http://$GRAFANA_BIND"
+else
+  bad "grafana: UI/API de health não respondeu"
+fi
+
+if compose exec -T grafana wget -q -O /dev/null http://loki:3100/ready 2>/dev/null; then
+  ok "loki: /ready acessível pela rede de observabilidade"
+else
+  bad "loki: /ready falhou pela rede de observabilidade"
+fi
+
+# The single-quoted script is intentionally evaluated inside the Grafana
+# container, not by this outer shell.
+# shellcheck disable=SC2016
+if compose exec -T grafana sh -c \
+  'i=0; while [ "$i" -lt 12 ]; do values=$(wget -q -O - http://loki:3100/loki/api/v1/label/container/values || true); case "$values" in *backend*) exit 0;; esac; i=$((i+1)); sleep 2; done; exit 1' \
+  2>/dev/null; then
+  ok "logs: container backend chegou ao Loki via Vector"
+else
+  bad "logs: container backend não chegou ao Loki via Vector"
+fi
+
+# 5. media-gateway: a porta real vem do binding do Compose (default 9002).
 MEDIA_GATEWAY_BIND="$(compose port media-gateway 80 2>/dev/null || true)"
 if [[ -n "$MEDIA_GATEWAY_BIND" ]]; then
   MEDIA_GATEWAY_URL="http://$MEDIA_GATEWAY_BIND"
@@ -75,21 +107,21 @@ else
   bad "media-gateway: Compose não retornou o binding da porta 80"
 fi
 
-# 5. radar via exec (sem porta publicada no host — é a regra)
+# 7. radar via exec (sem porta publicada no host — é a regra)
 if compose exec -T radar python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')" 2>/dev/null; then
   ok "radar: /health/ready (via exec, sem porta no host)"
 else
   bad "radar: /health/ready falhou via exec"
 fi
 
-# 6. backend -> radar pela radar-net
+# 8. backend -> radar pela radar-net
 if compose exec -T backend curl -fsS --max-time 5 http://radar:8000/health/live -o /dev/null; then
   ok "radar-net: backend alcança radar:8000/health/live"
 else
   bad "radar-net: backend NÃO alcança radar:8000"
 fi
 
-# 7. buckets presentes + objeto-marcador no público (one-shot rc na rede
+# 9. buckets presentes + objeto-marcador no público (one-shot rc na rede
 #    default; credenciais do env file). O marcador é usado no check 7 — não
 #    dependemos de ListBucket anônimo, que é acessório da política "download"
 #    e mudaria o motivo de uma falha.
@@ -115,7 +147,7 @@ else
   bad "rustfs: verificação de buckets/marcador falhou"
 fi
 
-# 8. leitura anônima direta do OBJETO no público (o navegador não tem
+# 10. leitura anônima direta do OBJETO no público (o navegador não tem
 #    credencial S3). O check seguinte prova o caminho usado pela aplicação.
 if [[ "$(curl -fsS --max-time 5 "http://127.0.0.1:9000/public-local/public/asset/smoke-check.txt" 2>/dev/null)" == "smoke" ]]; then
   ok "rustfs: objeto anônimo lê sem credencial no public-local (fotos do navegador OK)"
@@ -123,7 +155,7 @@ else
   bad "rustfs: leitura anônima do objeto em public-local falhou"
 fi
 
-# 9. privado e quarentena fechados para anônimo (espera HTTP 403)
+# 11. privado e quarentena fechados para anônimo (espera HTTP 403)
 for bucket in private-local quarantine-local; do
   code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:9000/$bucket/" || true)"
   if [[ "$code" == "403" ]]; then
@@ -133,7 +165,7 @@ for bucket in private-local quarantine-local; do
   fi
 done
 
-# 10. media-gateway: usa a base sem path, encaminha somente o namespace
+# 12. media-gateway: usa a base sem path, encaminha somente o namespace
 #     público opaco e não funciona como proxy aberto para outros buckets,
 #     paths ou métodos.
 if [[ "$(curl -fsS --max-time 5 "$MEDIA_GATEWAY_URL/public/asset/smoke-check.txt" 2>/dev/null)" == "smoke" ]]; then
@@ -171,7 +203,7 @@ for method in PUT POST DELETE; do
   fi
 done
 
-# 11. preflight CORS do direct-upload: navegador (origem :4200) -> rustfs:9000.
+# 13. preflight CORS do direct-upload: navegador (origem :4200) -> rustfs:9000.
 #    Simulado no host com --resolve (equivalente ao hosts local do navegador).
 PREFLIGHT="$(curl -s -o /dev/null -D - --max-time 5 --resolve rustfs:9000:127.0.0.1 \
   -X OPTIONS 'http://rustfs:9000/quarantine-local/preflight-probe' \
@@ -185,7 +217,7 @@ else
   bad "cors: preflight sem ACAO esperada (init aplicou o CORS XML?)"
 fi
 
-# 12. O endpoint novo devolve leitura pré-assinada; validar explicitamente que o
+# 14. O endpoint novo devolve leitura pré-assinada; validar explicitamente que o
 # bucket de quarentena continua aceitando os métodos de leitura para todas as
 # origens locais configuradas no init. Nenhuma credencial é usada aqui.
 for origin in http://localhost:4200 http://localhost:4000 http://127.0.0.1:4200; do
@@ -207,7 +239,7 @@ for origin in http://localhost:4200 http://localhost:4000 http://127.0.0.1:4200;
   done
 done
 
-# 13. policy efetiva da credencial dedicada. O bucket público não é testado
+# 15. policy efetiva da credencial dedicada. O bucket público não é testado
 # aqui de forma negativa: no dev ele é deliberadamente anônimo; isso é uma
 # regra independente da policy desta credencial.
 POLICY_CHECK="$(

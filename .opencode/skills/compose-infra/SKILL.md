@@ -111,8 +111,12 @@ arquivos, networking) e Production Hardening Guide do Dokploy.
 
 - `security_opt: [no-new-privileges:true]` nos serviços de aplicação;
 - `restart: unless-stopped` (dev e prod);
-- logging `json-file` com `max-size`/`max-file` em todos os serviços
-  (impede disco cheio; o daemon.json da VPS também deve ter default);
+- em prod, logging `json-file` com `max-size`/`max-file` nos serviços da
+  aplicação (impede disco cheio; o daemon.json da VPS também deve ter
+  default); o Dokploy/Vector faz o envio externo;
+- em dev, os serviços de aplicação usam o driver Docker `fluentd` assíncrono
+  para o Vector local, enquanto Loki/Grafana/Vector usam `json-file` para não
+  criar ciclo de observabilidade;
 - imagens de terceiros pinadas por tag específica ou digest em prod
   (cloudflared, postgres, rustfs, mailpit): `:latest` só é aceitável para
   as nossas imagens com `pull_policy: always` e tagueamento por sha no CI
@@ -132,4 +136,6 @@ arquivos, networking) e Production Hardening Guide do Dokploy.
    curl http://radar:8000/health/live` OK; de outro container/host falha);
    `docker network inspect` confirma `internal: true`;
 5. dev: `docker compose ps` mostra tudo vinculado a `127.0.0.1`;
-6. `git diff --check` e leitura do diff final (nenhum segredo).
+6. dev observability: Grafana responde em loopback, Loki está healthy, um log
+   real chega ao Loki via Vector e nenhum serviço monta Docker socket;
+7. `git diff --check` e leitura do diff final (nenhum segredo).

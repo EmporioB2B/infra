@@ -191,6 +191,42 @@ certificado gerado por `scripts/gen-dev-certs.sh`.
 O Radar **existente — dev** não é emulado: usa o R2 de teste real (restrição do
 `config.py`).
 
+## Observabilidade de logs
+
+- **Existente — dev:** `loki` usa `grafana/loki:3.5.1`, escuta `3100` somente
+  na rede `observability`, armazena no volume `loki-data` e retém 7 dias
+  (`compose/loki/config.yaml:3-4,28-38`). O healthcheck consulta `/ready` a cada
+  5s, com `start_period` de 10s e 12 tentativas; reinicia com
+  `unless-stopped` e usa `json-file` rotacionado em 10 MiB/3 arquivos
+  (`compose/docker-compose.dev.yml:56-65`).
+- **Existente — dev:** `vector` usa `timberio/vector:0.49.0-alpine`, recebe o
+  protocolo Fluent em `24224` publicado somente como
+  `127.0.0.1:${VECTOR_FLUENTD_PORT:-24224}`, tenta parsear o JSON dos eventos e
+  preserva os campos ECS do Backend ao enviar ao Loki com buffer em disco no
+  volume `vector-data`. A API local de health em `8686` é consultada pelo
+  healthcheck; a validação estática de configuração é feita separadamente no
+  gate (`vector validate --skip-healthchecks`). O serviço reinicia com
+  `unless-stopped`, usando `json-file` rotacionado em 10 MiB/3 arquivos
+  (`compose/docker-compose.dev.yml:67-87`). Não monta Docker socket.
+- **Existente — dev:** `grafana` usa `grafana/grafana:12.0.0`, publica a UI
+  somente em `127.0.0.1:${GRAFANA_PORT:-3000}`, provisiona o datasource Loki e
+  persiste dados no volume `grafana-data`. `GRAFANA_ADMIN_PASSWORD` é
+  obrigatória; `GRAFANA_ADMIN_USER` defaulta `admin`, e a UI desabilita cadastro
+  e acesso anônimo. O healthcheck consulta `/api/health` a cada 10s, com
+  `start_period` de 20s e 12 tentativas; reinicia com `unless-stopped` e usa
+  `json-file` rotacionado em 10 MiB/3 arquivos
+  (`compose/docker-compose.dev.yml:89-114`).
+- **Existente — dev:** o Backend escreve ECS no console, separando
+  `DEBUG/INFO/WARN` em stdout e `ERROR` em stderr; não há appender de arquivo
+  (`Backend_Java/src/main/resources/application-container.yml:22-31`,
+  `Backend_Java/src/main/resources/logback-spring.xml:7-42`). O contrato ECS é
+  verificado diretamente para o Backend; não é uma afirmação de formato dos
+  demais serviços sem fonte correspondente.
+- **Planejado — produção:** o Dokploy instala `dokploy-vector` ao associar a
+  VPS a um provider Grafana Loki em `Settings → Logs & Metrics`; endpoint,
+  tenant/usuário e token são segredos do painel/Secrets Provider. Loki/Grafana
+  não entram no Compose da aplicação no MVP.
+
 ## Hermes_Robo_Whats_Python
 
 Fora do stack nesta fase. Consumidor futuro da API privada do Radar

@@ -1,8 +1,9 @@
 # Emporio B2B — compose de DESENVOLVIMENTO/INTEGRAÇÃO (TASK-INFRA-001)
 #
 # Ambiente local único "como se fosse produção": front, api, radar, postgres,
-# RustFS (R2 do Back, incluindo o bucket público de fotos), media-gateway e
-# Mailpit (SMTP), com a mesma topologia de redes da produção (docs/networks.md).
+# RustFS (R2 do Back, incluindo o bucket público de fotos), media-gateway,
+# Mailpit (SMTP) e observabilidade local (Vector, Loki e Grafana), com a mesma
+# topologia de redes da produção (docs/networks.md).
 #
 # Uso (a partir da raiz deste repo; exige os repos irmãos como vizinhos):
 #   cp env/.env.dev.example env/.env.dev  # preencher (openssl rand)
@@ -22,12 +23,96 @@
 name: emporio-dev
 
 x-logging: &dev-logging
+  # O Docker envia stdout/stderr ao Vector local sem montar docker.sock.
+  # `fluentd-async` evita que a indisponibilidade transitória do coletor trave
+  # o processo da aplicação; o buffer durável fica no sink do Vector.
+  driver: fluentd
+  options:
+    fluentd-address: "127.0.0.1:${VECTOR_FLUENTD_PORT:-24224}"
+    tag: "emporio.{{.Name}}"
+    fluentd-async: "true"
+    fluentd-async-reconnect-interval: "1s"
+    fluentd-buffer-limit: "1048576"
+
+x-local-logging: &local-logging
+  # Não enviar os próprios componentes de observabilidade para o pipeline:
+  # Loki -> Vector -> Loki seria um ciclo. O Docker mantém esses logs locais.
   driver: json-file
   options:
     max-size: "10m"
     max-file: "3"
 
 services:
+  # ---------------------------------------------------------------------------
+  # Observabilidade local. Loki/Grafana ficam somente na rede própria; apenas
+  # a UI do Grafana e a porta Fluent do Vector são publicadas em loopback.
+  # ---------------------------------------------------------------------------
+  loki:
+    image: grafana/loki:3.5.1
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./loki/config.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3100/ready >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      start_period: 10s
+      retries: 12
+    networks:
+      - observability
+    restart: unless-stopped
+    logging: *local-logging
+
+  vector:
+    image: timberio/vector:0.49.0-alpine
+    command: ["--config-toml", "/etc/vector/vector.toml"]
+    ports:
+      - "127.0.0.1:${VECTOR_FLUENTD_PORT:-24224}:24224"
+    volumes:
+      - ./vector/vector.toml:/etc/vector/vector.toml:ro
+      - vector-data:/var/lib/vector
+    depends_on:
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8686/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 6
+    networks:
+      - observability
+    restart: unless-stopped
+    logging: *local-logging
+
+  grafana:
+    image: grafana/grafana:12.0.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD obrigatória para a UI local do Grafana}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_LOG_MODE: console
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 12
+    networks:
+      - observability
+    restart: unless-stopped
+    logging: *local-logging
+
   # ---------------------------------------------------------------------------
   # Banco do Back em dev (produção usa Supabase externo; nunca espelhar isto
   # para prod). Espelha o postgres-dev do repo Backend_Java.
@@ -255,6 +340,7 @@ services:
     networks:
       - default
     restart: "no"
+    logging: *local-logging
 
   # ---------------------------------------------------------------------------
   # Gateway público local para mídia. O Backend compõe `base + storageKey`,
@@ -377,8 +463,15 @@ networks:
     # `internal` + egress alcança a internet somente pela egress
     # (comportamento documentado do Docker).
     driver: bridge
+  observability:
+    # Loki/Grafana/Vector não precisam acessar a rede da aplicação nem
+    # radar-net; o Docker logging driver entrega eventos ao Vector via loopback.
+    driver: bridge
 
 volumes:
   pgdata:
   rustfs-data:
   radar_state:
+  loki-data:
+  vector-data:
+  grafana-data:

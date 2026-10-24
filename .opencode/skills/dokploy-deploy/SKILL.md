@@ -70,6 +70,23 @@ Hardening Guide).
 - redeploy puxa `:latest` das nossas imagens (`pull_policy: always`) e
   recria só os containers cuja imagem/config mudou.
 
+## Logs de produção
+
+O Dokploy possui **Settings → Logs & Metrics**. Essa função não instala Loki
+nem Grafana Cloud: ao criar um provider Grafana Loki e associá-lo a um servidor,
+o Dokploy instala o agente Vector (`dokploy-vector`) como serviço no servidor e
+envia os logs dos containers ao endpoint configurado.
+
+- endpoint HTTPS, tenant/usuário e token ficam no painel/Secrets Provider;
+- o compose da aplicação continua escrevendo em stdout/stderr com rotação
+  Docker, sem arquivo de log e sem Docker socket;
+- logs já enviados ao provider sobrevivem a restart/recreate da aplicação;
+- a retenção é a política do provider e deve ser conferida no onboarding;
+- validar o agente `Running`, egress HTTPS, ingestão, retenção e rotação do
+  token sem imprimir credenciais;
+- Loki/Grafana self-hosted, caso escolhido no futuro, é uma aplicação Compose
+  separada e não deve ser acoplada ao stack do marketplace.
+
 ## Hardening da VPS (checklist do guia oficial, adaptado)
 
 - host: Ubuntu/Debian LTS, `unattended-upgrades`, SSH só com chave (sem

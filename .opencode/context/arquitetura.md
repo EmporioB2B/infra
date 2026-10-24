@@ -38,6 +38,8 @@ services:
   api         ── radar-net (internal) ──> radar:8000
   api, radar  ── egress ──> internet (Supabase:5432/6543, R2:443,
                                        SMTP:587, ViaCEP:443)
+  api/front/radar ── stdout/stderr ──> Docker logs ──> Dokploy Vector
+                                      ──> Grafana Cloud Loki (planejado)
 
 networks:
   apps      bridge            cloudflared ↔ front ↔ api
@@ -63,7 +65,8 @@ para R2/ViaCEP.
 **Existente — dev:** mesma topologia de redes da produção planejada, com
 emuladores no lugar dos serviços externos e sem cloudflared. Implementado em
 `compose/docker-compose.dev.yml`, com healthchecks, `scripts/smoke.sh`,
-isolamento da `radar-net` e `media-gateway` local para fotos públicas.
+isolamento da `radar-net`, `media-gateway` local para fotos públicas e
+observabilidade local.
 Detalhes de portas/publicação em `docs/networks.md`:
 
 ```text
@@ -77,6 +80,9 @@ services:
   media-gateway  nginx para fotos públicas              127.0.0.1:9002 → :80
                 (default externo 9002; MEDIA_GATEWAY_PORT é opcional)
   mailpit    SMTP com STARTTLS+auth; UI               127.0.0.1:8025
+  loki       armazenamento local de logs              somente rede observability
+  vector     coleta Fluent → Loki                     127.0.0.1:${VECTOR_FLUENTD_PORT:-24224} (driver)
+  grafana    UI/query Loki                            127.0.0.1:${GRAFANA_PORT:-3000}
   front-dev  Dockerfile-dev (ng serve + proxy)        127.0.0.1:4200
   front-prod profile "prodlike": imagem SSR de        127.0.0.1:4000
               produção — [PLANEJADO], ainda não existe no compose
@@ -84,15 +90,33 @@ services:
 
 networks:
   default    front-dev ↔ backend ↔ emuladores (postgres, rustfs, media-gateway,
-             mailpit)
+             mailpit); logging driver → Vector via loopback
   radar-net  internal: exclusivamente backend ↔ radar
   egress     radar → R2 de teste / ViaCEP
+  observability  vector ↔ loki ↔ grafana; sem acesso a radar-net
 
 volumes:
   pgdata, rustfs-data, radar_state (named); bind-mount somente-leitura
   de certs/dev para backend e mailpit (material TLS efêmero de dev,
-  ignorado pelo git)
+  ignorado pelo git); loki-data, vector-data e grafana-data (named)
 ```
+
+- **Existente — dev:** o Backend mantém ECS JSON em stdout/stderr e os serviços
+  de aplicação e emuladores de longa duração usam o driver Docker `fluentd`
+  assíncrono para o Vector local
+  (`Backend_Java/src/main/resources/application-container.yml:22-31`,
+  `Backend_Java/src/main/resources/logback-spring.xml:7-42`,
+  `compose/docker-compose.dev.yml:25-35,136,249,283,322,377,406,435`). Loki,
+  Vector e Grafana usam `json-file` rotacionado para não formar um ciclo de
+  coleta.
+  Nenhum serviço monta `/var/run/docker.sock`.
+- **Existente — dev:** o Grafana provisiona o datasource `Emporio Loki`, fica
+  preso a `127.0.0.1` e o Loki retém logs locais por 7 dias no volume
+  `loki-data`; o Vector possui buffer de sink em disco em `vector-data`.
+- **Planejado — produção:** o Dokploy configura `Settings → Logs & Metrics`
+  com provider Grafana Loki; o `dokploy-vector` envia os logs dos containers
+  para o endpoint HTTPS. O Dokploy não instala Loki/Grafana Cloud e nenhum
+  token é versionado neste repo.
 
 - O serviço da api chama-se `backend` de propósito: o `proxy.conf.json` do
   Front já aponta para `http://backend:8080`.

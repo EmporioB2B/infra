@@ -42,6 +42,11 @@ Regras estruturais:
   de Parquets);
 - **Front**: nenhum segredo — `SSR_JWT_SECRET` de rascunhos antigos **não
   existe** no Front; segredo de JWT não entra em bundle de browser, ponto;
+- **Observabilidade dev**: `GRAFANA_ADMIN_PASSWORD` (somente no `.env.dev`
+  local; `GRAFANA_ADMIN_USER` não é segredo), portas locais são configuração;
+- **Grafana Cloud prod**: endpoint HTTPS do Loki, tenant/usuário quando
+  aplicável e token de escrita — vivem no provider/Secrets Provider do
+  Dokploy, não no compose ou `env/.env.prod.example`;
 - **Infra/borda**: `CLOUDFLARED_TUNNEL_TOKEN`, `DOKPLOY_API_KEY`, PAT
   GHCR `read:packages` (Dokploy), PAT GHCR `write:packages` (só se CI não
   usar `GITHUB_TOKEN`), credenciais do painel Dokploy (2FA/passkey);
@@ -99,6 +104,8 @@ Regras estruturais:
   cloudflared → redeploy (túnel reconecta outbound);
 - **`DOKPLOY_API_KEY`**: gerar token novo com expiração → atualizar
   secrets dos 3 repos → revogar o antigo;
+- **token Grafana Cloud**: criar token de escrita mínimo → atualizar o provider
+  no Dokploy → validar ingestão → revogar o anterior;
 - **PAT GHCR**: gerar novo → atualizar Registry no Dokploy → validar pull
   → revogar;
 - registro: toda rotação fica anotada no runbook (`docs/deploy-dokploy.md`)

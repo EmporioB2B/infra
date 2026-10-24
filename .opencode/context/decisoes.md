@@ -1,8 +1,8 @@
 # Decisões arquiteturais da infraestrutura
 
-> Documento vivo. Cada decisão foi aprovada pelo operador em 2026-09-26 e é
-> referência até ser revista por task própria. A análise completa que originou
-> estas decisões está em `../tasks/passadas/`.
+> Documento vivo. As decisões registradas aqui são referência até serem
+> revistas por task própria. A análise histórica disponível está em
+> `../tasks/passadas/`.
 
 ## Deploy e borda
 
@@ -32,6 +32,7 @@
 | Egress | Rede `egress` para saída externa (R2, ViaCEP, Supabase, SMTP) | Separa tráfego interno de saída |
 | Dev | Portas publicadas somente em `127.0.0.1` | Nada do stack local fica exposto na LAN |
 | Management do Back | Porta 8081 nunca roteada pelo túnel | Actuator só para diagnóstico interno |
+| Logs da aplicação | **Existente — dev:** Backend em stdout/stderr ECS e containers coletados por Vector→Loki→Grafana local; **planejado — produção:** Dokploy Vector→Grafana Cloud Loki | Separar aplicação de armazenamento/consulta; não gravar arquivos no Backend nem montar Docker socket |
 
 ## Ambiente de dev/integração
 
@@ -42,6 +43,7 @@
 | SMTP em dev | **Mailpit** (UI em `127.0.0.1:8025`); precisa servir STARTTLS+auth — restrição de boot do Back com email habilitado (`servicos.md`); atendida com certificado dev + truststore (`scripts/gen-dev-certs.sh`) | Percorrer fluxos de email (confirmação, reset) sem provedor real |
 | Front em dev | `Dockerfile-dev` (ng serve + proxy) como padrão; imagem SSR de produção em profile `prodlike` para E2E "como se fosse produção" | Operador quer testar todos os percursos manualmente; `prodlike` depende das build-args do Front (task de pré-requisito) |
 | Nome do serviço api em dev | `backend` | `proxy.conf.json` do Front já aponta para `http://backend:8080`; evita mudança no repo Front |
+| Observabilidade local | **Existente — dev:** Loki + Vector + Grafana no Compose dev; UI somente em loopback; volumes nomeados e retenção de 7 dias | Reproduzir o contrato **planejado — produção** sem credenciais externas ou socket Docker |
 
 ## Escopo de testes
 
@@ -49,6 +51,17 @@
 |---|---|---|
 | E2E agora | **Manual**, contra o compose dev "prod-like"; sem framework de browser nesta fase | Operador definiu E2E como percorrer os fluxos, não necessariamente automação |
 | Automação | Suíte de integração API-level (Back↔Radar↔storage↔email) no repo Infra via `workflow_dispatch`/cron; Playwright vira task futura no repo Front | Nível 2 antes do nível 3 |
+
+## Observabilidade e produção
+
+- O Grafana Cloud Loki é o destino planejado de produção. O Dokploy não
+  provisiona Loki: a função `Settings → Logs & Metrics` instala `dokploy-vector`
+  no servidor e envia os logs ao provider configurado.
+- **Contrato planejado — produção:** o provider deve receber somente logs já
+  redigidos pela aplicação; `request_id`,
+  `operation_id` e outros campos de alta cardinalidade não são labels Loki.
+- A configuração do provider e seus tokens é operação do painel Dokploy e não
+  faz parte deste change set local.
 
 ## Refinamentos pós-pesquisa (2026-09-26, mesma sessão)
 

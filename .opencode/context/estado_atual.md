@@ -11,19 +11,29 @@ Fotografia factual vigente. Não é cronologia de tasks.
   com agentes (`arquiteto` primary com Git mutável interditado;
   `context-revisor` subagent, único editor de `context/`), contexto
   (incluindo `servicos.md` e `decisoes.md` refinados por pesquisa em
-  documentação oficial), 6 skills canônicas (`compose-infra`,
+  documentação oficial), 7 skills canônicas (`compose-infra`,
   `cloudflare-edge`, `dokploy-deploy`, `cicd-ghcr`, `secrets-env`,
-  `verification-before-completion`), histórico da análise de bootstrap e
+  `observability-logs`, `verification-before-completion`), histórico da análise de bootstrap e
   tarefas locais do operador em `.opencode/tasks/`.
 - **Existente — dev:** stack de desenvolvimento em
   `compose/docker-compose.dev.yml`, com todos os serviços de longa duração,
   `media-gateway` local para fotos públicas, `scripts/smoke.sh`, policy
-  dedicada, isolamento da `radar-net` e SMTP dev. Arquivos de suporte:
-  `README.md` (setup dev e requisito de hosts do upload direto),
+  dedicada, isolamento da `radar-net`, SMTP dev e observabilidade local
+  Vector/Loki/Grafana. Arquivos de suporte:
+  `README.md` (setup dev, logs no Grafana e requisito de hosts do upload direto),
   `env/.env.dev.example` (cobre todas as
   `${VAR:?}` do compose; placeholders apenas), `scripts/up-dev.sh`,
   `scripts/init-rustfs.sh`, `scripts/smoke.sh`, `scripts/gen-dev-certs.sh` e
-  `docs/networks.md`.
+  `docs/networks.md`/`docs/observability.md`.
+- **Existente — dev:** os logs dos serviços de aplicação seguem stdout/stderr
+  pelo driver Docker `fluentd` assíncrono para `vector`; Loki e Grafana não
+  montam Docker socket, a UI do Grafana fica em loopback e os dados usam
+  `loki-data`, `vector-data` e `grafana-data`. O Vector também não monta o
+  socket; seu healthcheck consulta a API local de liveness, enquanto a
+  validação de configuração e o smoke verificam a chegada de um log do Backend
+  ao Loki. O bootstrap aguarda os healthchecks
+  declarados (`compose/docker-compose.dev.yml:50-114`) e o smoke contém a prova
+  de ingestão (`scripts/smoke.sh:71-94`).
 - **Planejado — dev profile:** o perfil `prodlike` (`front-prod`) NÃO foi
   criado — bloqueado pela TASK-INFRA-002; o serviço está documentado no YAML e no
   doc.
@@ -118,13 +128,17 @@ Fotografia factual vigente. Não é cronologia de tasks.
   clones; 002 abre dependências no repo Front; 003/004/005 não
   iniciadas; o follow-up de TASK-INFRA-006 foi arquivado em
   `../passadas/20261023_TASK-INFRA-006-followup-contrato-9002.md`; o gateway
-  dev vigente está implementado nos artefatos acima.
+  dev vigente está implementado nos artefatos acima; TASK-INFRA-010 foi
+  arquivada com a observabilidade local, mantendo a etapa de provider
+  Grafana Cloud no Dokploy como pendência de produção.
   TASK-INFRA-009 tem wiring dev e gates runtime validados; o handoff
   [PLANEJADO — produção] continua sem aplicação no R2.
 - Backlog futuro (não bloqueia o MVP de deploy): mTLS/gateway interno do
   Radar (TASK-080/006 no repo Back e TASK-006 no repo Radar), staging,
   monitoramento/uptime, backup do Supabase, entrada do Hermes no stack,
-  pin de imagem por sha no Dokploy.
+  pin de imagem por sha no Dokploy. A integração de produção com Grafana Cloud
+  Loki permanece planejada: o Dokploy configura o provider e instala
+  `dokploy-vector`; nenhum Loki/Grafana entra no Compose da aplicação.
 - Intenção de produto registrada apenas no rascunho aposentado da raiz
   (destruído em 2026-09-26): integração de **gateway de pagamento**
   (`PAYMENT_GATEWAY_BASE_URL/CLIENT_ID/CLIENT_SECRET/TOKEN/

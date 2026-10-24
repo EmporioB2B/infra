@@ -12,6 +12,7 @@ emuladores no lugar dos serviços externos e sem cloudflared.
     :9002 media-gateway ──┤     front-dev ↔ backend ↔ postgres        │
     :9000/:9001 rustfs ───┤     backend ↔ media-gateway ↔ rustfs       │
     :8025 mailpit (UI) ───┤     backend ↔ rustfs, mailpit             │
+    :3000 grafana ────────┤     logs → Vector (loopback)               │
                          │                                           │
                          │   egress (bridge)  ── internet:           │
                          │     radar → R2 de teste / ViaCEP          │
@@ -28,6 +29,7 @@ emuladores no lugar dos serviços externos e sem cloudflared.
 | `default` | bridge | front-dev, backend, postgres, rustfs, rustfs-init, media-gateway, mailpit | tráfego interno do stack; toda publicação no host é prefixada `127.0.0.1` |
 | `radar-net` | bridge **`internal: true`** | backend, radar | única via para a API privada do Radar; sem gateway — nada entra/sai dela pelo host nem por outras redes |
 | `egress` | bridge | radar | saída controlada para o R2 de teste real e ViaCEP |
+| `observability` | bridge | vector, loki, grafana | pipeline local de logs; sem acesso a `radar-net`; Vector recebe somente pela porta de loopback publicada pelo host |
 
 - **Radar nunca publica porta** (`ports:` ausente em qualquer compose, dev
   ou prod) e só é alcançado por containers na `radar-net`. Enquanto o Radar
@@ -67,6 +69,11 @@ emuladores no lugar dos serviços externos e sem cloudflared.
   `/asset/` ou métodos de escrita. O healthcheck é `/healthz`.
 - Em produção não existe esse gateway: `media.emporiob2b.com.br` aponta
   diretamente para o bucket público R2 na borda Cloudflare.
+- O Grafana local publica somente `127.0.0.1:3000`. Loki não publica porta no
+  host; Grafana e Vector acessam-no pela rede `observability`. Os serviços de
+  aplicação enviam stdout/stderr ao Vector pelo logging driver `fluentd` em
+  `127.0.0.1:24224`; nenhum serviço monta Docker socket. Detalhes e o fluxo de
+  produção via Dokploy/Grafana Cloud estão em [`observability.md`](observability.md).
 
 ## Direct-upload no dev (navegador → RustFS)
 
