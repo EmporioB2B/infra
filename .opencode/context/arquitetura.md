@@ -62,7 +62,8 @@ para R2/ViaCEP.
 
 ## Desenvolvimento/integração (máquina local)
 
-**Existente — dev:** mesma topologia de redes da produção planejada, com
+**Existente — dev:** mesma topologia principal de redes da produção planejada,
+com a rede adicional `metrics-net` exclusiva do dev para o scrape do Backend,
 emuladores no lugar dos serviços externos e sem cloudflared. Implementado em
 `compose/docker-compose.dev.yml`, com healthchecks, `scripts/smoke.sh`,
 isolamento da `radar-net`, `media-gateway` local para fotos públicas e
@@ -72,7 +73,8 @@ Detalhes de portas/publicação em `docs/networks.md`:
 ```text
 services:
   postgres   postgres:16-alpine (db emporio)          127.0.0.1:5432
-  backend    build ../Backend_Java (dev,container)    127.0.0.1:8080/8081
+  backend    build ../Backend_Java (dev,container)    127.0.0.1:8080
+             management 10.254.20.10:8081 somente na metrics-net
   radar      build ../Radar_Middleware_Python         SEM portas;
              env_file local do Radar (R2 de teste)
   rustfs     emula R2 do Back (quarentena/privado/    127.0.0.1:9000/9001
@@ -82,21 +84,23 @@ services:
   mailpit    SMTP com STARTTLS+auth; UI               127.0.0.1:8025
   loki       armazenamento local de logs              somente rede observability
   vector     coleta Fluent → Loki                     127.0.0.1:${VECTOR_FLUENTD_PORT:-24224} (driver)
-  grafana    UI/query Loki                            127.0.0.1:${GRAFANA_PORT:-3000}
+  prometheus scrape do Backend pela metrics-net    também na observability
+  grafana    UI/query Loki + Prometheus               127.0.0.1:${GRAFANA_PORT:-3000}
   front-dev  Dockerfile-dev (ng serve + proxy)        127.0.0.1:4200
   front-prod profile "prodlike": imagem SSR de        127.0.0.1:4000
               produção — [PLANEJADO], ainda não existe no compose
              (bloqueado pela TASK-INFRA-002; ver docs/networks.md)
 
 networks:
-  default    front-dev ↔ backend ↔ emuladores (postgres, rustfs, media-gateway,
-             mailpit); logging driver → Vector via loopback
+  default    front-dev ↔ backend ↔ emuladores (postgres, rustfs, rustfs-init,
+             media-gateway, mailpit); logging driver → Vector via loopback
   radar-net  internal: exclusivamente backend ↔ radar
   egress     radar → R2 de teste / ViaCEP
-  observability  vector ↔ loki ↔ grafana; sem acesso a radar-net
+  observability  vector ↔ loki ↔ prometheus ↔ grafana; sem acesso a radar-net
+  metrics-net    internal: backend:10.254.20.10 ↔ prometheus:10.254.20.20
 
 volumes:
-  pgdata, rustfs-data, radar_state (named); bind-mount somente-leitura
+  pgdata, rustfs-data, radar_state, prometheus-data (named); bind-mount somente-leitura
   de certs/dev para backend e mailpit (material TLS efêmero de dev,
   ignorado pelo git); loki-data, vector-data e grafana-data (named)
 ```
@@ -106,13 +110,30 @@ volumes:
   assíncrono para o Vector local
   (`Backend_Java/src/main/resources/application-container.yml:22-31`,
   `Backend_Java/src/main/resources/logback-spring.xml:7-42`,
-  `compose/docker-compose.dev.yml:25-35,136,249,283,322,377,406,435`). Loki,
-  Vector e Grafana usam `json-file` rotacionado para não formar um ciclo de
-  coleta.
+  `compose/docker-compose.dev.yml:25-43,53-75,77-114,116-141,147-163,170-278,288-312,321-372,381-406,413-435,443-464`). Loki,
+  Vector, Prometheus e Grafana usam `json-file` rotacionado para não formar um
+  ciclo de coleta.
   Nenhum serviço monta `/var/run/docker.sock`.
 - **Existente — dev:** o Grafana provisiona o datasource `Emporio Loki`, fica
   preso a `127.0.0.1` e o Loki retém logs locais por 7 dias no volume
   `loki-data`; o Vector possui buffer de sink em disco em `vector-data`.
+- **Existente — dev:** o Prometheus `prom/prometheus:v3.5.0` coleta
+  `10.254.20.10:8081/actuator/prometheus` pela `metrics-net` interna, sem porta
+  publicada, e o Grafana provisiona o datasource `Emporio Prometheus` pela
+  rede `observability`. A retenção local configurada é de 7 dias no volume
+  `prometheus-data`. O bootstrap limpo foi validado por `scripts/up-dev.sh` e o
+  smoke cobre health, scrape, target, datasource, isolamento e exige
+  `front-dev` running/healthy além do HTTP local; restart/recuperação estão
+  fora do escopo de validação atual.
+  (`compose/prometheus/prometheus.yml:1-14`,
+  `compose/grafana/provisioning/datasources/prometheus.yaml:3-10`,
+  `scripts/up-dev.sh:82-103`, `scripts/smoke.sh:56-160,172-180`).
+- **Existente — dev:** `metrics-net` é `internal: true` e não publica 8081,
+  mas isso não é firewall contra o próprio host Docker: o host pode alcançar
+  diretamente `10.254.20.10:8081`. A arquitetura não promete bloquear esse
+  acesso; a contenção verificada é entre containers e por ausência de publish
+  (`compose/docker-compose.dev.yml:266-278,482-510`,
+  `scripts/smoke.sh:65-73,91-99`).
 - **Planejado — produção:** o Dokploy configura `Settings → Logs & Metrics`
   com provider Grafana Loki; o `dokploy-vector` envia os logs dos containers
   para o endpoint HTTPS. O Dokploy não instala Loki/Grafana Cloud e nenhum

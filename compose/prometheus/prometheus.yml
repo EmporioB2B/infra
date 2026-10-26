@@ -1,0 +1,14 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 5s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: emporio-backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - 10.254.20.10:8081
+        labels:
+          environment: dev
+          service: backend

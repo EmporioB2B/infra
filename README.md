@@ -3,7 +3,7 @@
 Este repositório contém o Compose de desenvolvimento integrado e a
 infraestrutura compartilhada do Emporio B2B. O stack local inclui Backend,
 Frontend, Radar, PostgreSQL, RustFS, media-gateway, Mailpit e observabilidade
-local com Vector, Loki e Grafana.
+local com Vector, Loki, Prometheus e Grafana.
 
 ## Subir o ambiente local
 
@@ -107,7 +107,7 @@ Este requisito é somente para o Compose local de desenvolvimento. Consulte
 [`docs/networks.md`](docs/networks.md) para detalhes das redes e do upload
 direto.
 
-## Logs no Grafana local
+## Observabilidade no Grafana local
 
 O bootstrap já sobe a observabilidade local e imprime a URL da UI:
 
@@ -115,6 +115,7 @@ O bootstrap já sobe a observabilidade local e imprime a URL da UI:
 http://127.0.0.1:3000
 ```
 
-O login usa `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD` do env local. O
-datasource Loki já vem provisionado; consulte [`docs/observability.md`](docs/observability.md)
-para as queries e para o procedimento de produção via Grafana Cloud/Dokploy.
+O login usa `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD` do env local. Os
+datasources Loki e Prometheus já vêm provisionados; consulte
+[`docs/observability.md`](docs/observability.md) para as queries e para o
+procedimento de produção via Grafana Cloud/Dokploy.

@@ -4,7 +4,7 @@
 # Uso: scripts/smoke.sh   (assumes o stack já sobe por up-dev.sh)
 #
 # Verifica com evidência, sem alterar nada:
-#   1. api actuator UP (127.0.0.1:8081);
+#   1. api actuator UP pela interface interna de management;
 #   2. front dev-server responde (127.0.0.1:4200);
 #   3. UI do Mailpit responde (127.0.0.1:8025);
 #   4. Grafana responde em loopback e Loki está pronto;
@@ -21,6 +21,9 @@
 #  14. CORS do bucket de quarentena mantém GET e HEAD nas origens dev;
 #  15. credencial dedicada lê só o prefixo de quarentena e nega alterações,
 #      listagem e leitura privada.
+#  16. Prometheus coleta as métricas do Backend pela metrics-net;
+#  17. Radar não alcança a porta de management;
+#  18. metrics-net/radar-net possuem exatamente os membros contratados.
 #
 # Exit != 0 na primeira falha reportada (continua os demais checks para dar
 # o panorama completo).
@@ -31,6 +34,9 @@ COMPOSE_FILE="$ROOT/compose/docker-compose.dev.yml"
 ENV_FILE="$ROOT/env/.env.dev"
 RC_IMAGE="rustfs/rc:v0.1.30"
 NET="emporio-dev_default"
+METRICS_NET="emporio-dev_metrics-net"
+RADAR_NET="emporio-dev_radar-net"
+MANAGEMENT_ADDRESS="10.254.20.10"
 
 [[ -f "$ENV_FILE" ]] || { echo "ERRO: falta $ENV_FILE (scripts/up-dev.sh)" >&2; exit 1; }
 
@@ -47,28 +53,141 @@ FAIL=0
 ok()   { printf 'OK   %s\n' "$*"; }
 bad()  { printf 'FAIL %s\n' "$*"; FAIL=1; }
 
-# 1. api
-if curl -fsS --max-time 5 http://127.0.0.1:8081/actuator/health | grep -q '"status":"UP"'; then
-  ok "api: /actuator/health UP (127.0.0.1:8081)"
+# 1. api management (somente pela interface interna)
+# shellcheck disable=SC2016 # a variável deve expandir dentro do container backend
+if compose exec -T backend sh -c 'curl -fsS --max-time 5 "http://${MANAGEMENT_SERVER_ADDRESS}:8081/actuator/health"' \
+  | grep -q '"status":"UP"'; then
+  ok "api: /actuator/health UP em ${MANAGEMENT_ADDRESS}:8081"
 else
-  bad "api: /actuator/health não respondeu UP"
+  bad "api: /actuator/health não respondeu UP pela metrics-net"
 fi
 
-# 2. front
-if curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:4200/; then
-  ok "front-dev: HTTP 200 em 127.0.0.1:4200"
+# 2. O management não possui publicação no host. O acesso direto do host ao
+# IP interno da bridge é uma limitação conhecida do Docker e não é testado como
+# firewall nesta task.
+if [[ -z "$(compose port backend 8081 2>/dev/null || true)" ]] \
+  && ! curl -fsS --max-time 3 http://127.0.0.1:8081/actuator/health >/dev/null 2>&1; then
+  ok "api: 8081 não publicada no host"
 else
-  bad "front-dev: sem resposta em 127.0.0.1:4200"
+  bad "api: 8081 possui publicação ou respondeu pelo loopback do host"
 fi
 
-# 3. mailpit UI
+# 3. Prometheus coleta o endpoint real e expõe o target UP.
+if compose exec -T prometheus wget -q -O - \
+  http://10.254.20.10:8081/actuator/prometheus | grep -q '^# HELP'; then
+  ok "prometheus: scrape HTTP 200 do Backend em 10.254.20.10:8081"
+else
+  bad "prometheus: scrape do Backend falhou"
+fi
+
+if compose exec -T prometheus wget -q -O - \
+  'http://127.0.0.1:9090/api/v1/query?query=up%7Bjob%3D%22emporio-backend%22%7D' \
+  | grep -q '"value".*"1"'; then
+  ok "prometheus: target emporio-backend está UP"
+else
+  bad "prometheus: target emporio-backend não está UP"
+fi
+
+# O Radar possui somente radar-net/egress e deve falhar ao alcançar o bind de
+# management, que existe exclusivamente na metrics-net.
+if compose exec -T radar python -c \
+  "import urllib.request; urllib.request.urlopen('http://10.254.20.10:8081/actuator/prometheus', timeout=3)" \
+  >/dev/null 2>&1; then
+  bad "isolamento: Radar alcançou indevidamente o management do Backend"
+else
+  ok "isolamento: Radar não alcança Backend:8081"
+fi
+
+network_members() {
+  docker network inspect "$1" \
+    --format '{{range .Containers}}{{.Name}}{{"\n"}}{{end}}' 2>/dev/null || true
+}
+
+metrics_members=()
+while IFS= read -r member; do
+  [[ -n "$member" ]] && metrics_members+=("$member")
+done < <(network_members "$METRICS_NET")
+
+metrics_has_backend=0
+metrics_has_prometheus=0
+for member in "${metrics_members[@]}"; do
+  case "$member" in
+    *backend*) metrics_has_backend=1 ;;
+    *prometheus*) metrics_has_prometheus=1 ;;
+  esac
+done
+if [[ "${#metrics_members[@]}" -eq 2 && "$metrics_has_backend" -eq 1 \
+  && "$metrics_has_prometheus" -eq 1 \
+  && "$(docker network inspect "$METRICS_NET" --format '{{.Internal}}' 2>/dev/null || true)" == "true" ]]; then
+  ok "metrics-net: internal e contém somente backend/prometheus"
+else
+  bad "metrics-net: topologia inesperada (${metrics_members[*]:-vazia})"
+fi
+
+radar_members=()
+while IFS= read -r member; do
+  [[ -n "$member" ]] && radar_members+=("$member")
+done < <(network_members "$RADAR_NET")
+
+radar_has_backend=0
+radar_has_radar=0
+for member in "${radar_members[@]}"; do
+  case "$member" in
+    *backend*) radar_has_backend=1 ;;
+    *radar*) radar_has_radar=1 ;;
+  esac
+done
+if [[ "${#radar_members[@]}" -eq 2 && "$radar_has_backend" -eq 1 \
+  && "$radar_has_radar" -eq 1 \
+  && "$(docker network inspect "$RADAR_NET" --format '{{.Internal}}' 2>/dev/null || true)" == "true" ]]; then
+  ok "radar-net: internal e contém somente backend/radar"
+else
+  bad "radar-net: topologia inesperada (${radar_members[*]:-vazia})"
+fi
+
+# 4. O Grafana alcança o Prometheus pela rede observability; a UI continua em
+# loopback e o datasource é provisionado no mesmo diretório somente-leitura.
+if compose exec -T grafana wget -q -O /dev/null http://prometheus:9090/-/healthy; then
+  ok "grafana: Prometheus acessível pela rede de observabilidade"
+else
+  bad "grafana: Prometheus não acessível pela rede de observabilidade"
+fi
+
+if compose exec -T grafana test -s /etc/grafana/provisioning/datasources/prometheus.yaml; then
+  ok "grafana: datasource Prometheus provisionado"
+else
+  bad "grafana: datasource Prometheus não está montado"
+fi
+
+COMPOSE_CONTAINERS="$(compose ps -q)"
+SOCKET_MOUNTS="$(printf '%s\n' "$COMPOSE_CONTAINERS" \
+  | xargs -r docker inspect --format '{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}' \
+  | grep -F '/var/run/docker.sock' || true)"
+if [[ -z "$SOCKET_MOUNTS" ]]; then
+  ok "segurança: nenhum serviço do stack monta Docker socket"
+else
+  bad "segurança: serviço monta Docker socket"
+fi
+
+# 5. front
+FRONT_CONTAINER="$(compose ps -aq front-dev)"
+FRONT_STATE="$(docker inspect --format '{{.State.Status}}' "$FRONT_CONTAINER" 2>/dev/null || true)"
+FRONT_HEALTH="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$FRONT_CONTAINER" 2>/dev/null || true)"
+if [[ "$FRONT_STATE" == "running" && "$FRONT_HEALTH" == "healthy" ]] \
+  && curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:4200/; then
+  ok "front-dev: container healthy e HTTP 200 em 127.0.0.1:4200"
+else
+  bad "front-dev: container não está healthy (state=$FRONT_STATE health=$FRONT_HEALTH)"
+fi
+
+# 6. mailpit UI
 if curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8025/; then
   ok "mailpit: UI 200 em 127.0.0.1:8025"
 else
   bad "mailpit: UI sem resposta em 127.0.0.1:8025"
 fi
 
-# 4. Grafana e Loki.
+# 7. Grafana e Loki.
 GRAFANA_BIND="$(compose port grafana 3000 2>/dev/null || true)"
 if [[ -n "$GRAFANA_BIND" ]] && curl -fsS --max-time 5 -o /dev/null "http://$GRAFANA_BIND/api/health"; then
   ok "grafana: API de health em http://$GRAFANA_BIND"

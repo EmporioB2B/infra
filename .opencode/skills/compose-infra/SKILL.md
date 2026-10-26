@@ -56,7 +56,7 @@ arquivos, networking) e Production Hardening Guide do Dokploy.
 ## Saúde e ordenação
 
 - todo serviço de longa duração tem `healthcheck` com o binário que existe
-  na imagem (api: `curl` em `http://127.0.0.1:8081/actuator/health` — porta
+  na imagem (api: `curl` em `http://${MANAGEMENT_SERVER_ADDRESS}:8081/actuator/health` — porta
   de management, não 8080; radar: `/health/ready`; front: fetch do Node;
   postgres: `pg_isready`);
 - `interval`/`timeout`/`retries`/`start_period` calibrados: start_period
@@ -73,6 +73,8 @@ arquivos, networking) e Production Hardening Guide do Dokploy.
   - `radar-net` — `internal: true`, membros exclusivamente api+radar; sem
     gateway externo; é a contenção do Radar enquanto não há auth
     serviço-a-serviço;
+  - `metrics-net` — `internal: true`, membros exclusivamente api+Prometheus;
+    o management do Backend faz bind no IP da rede e não possui porta publicada;
   - `egress` — bridge comum para saída externa (R2, ViaCEP em dev/prod;
     Supabase, SMTP em prod); um serviço em `internal` + `egress` alcança a
     internet só pela não-interna (comportamento documentado, esperado);
@@ -81,7 +83,8 @@ arquivos, networking) e Production Hardening Guide do Dokploy.
 - o radar **não declara `ports:`** em nenhum compose, nem `expose`
   publicado, nem `network_mode: host/service:`;
 - em dev, toda publicação de porta é prefixada `127.0.0.1:` (postgres, api
-  8080/8081, rustfs 9000/9001, mailpit 8025, front 4200/4000); alternativa
+  8080, rustfs 9000/9001, mailpit 8025, front 4200/4000); management 8081 e
+  Prometheus não são publicados; alternativa
   equivalente: `driver_opts: com.docker.network.bridge.host_binding_ipv4:
   "127.0.0.1"` na rede;
 - em prod, nenhum serviço de aplicação publica porta; a única peça com
@@ -137,5 +140,6 @@ arquivos, networking) e Production Hardening Guide do Dokploy.
    `docker network inspect` confirma `internal: true`;
 5. dev: `docker compose ps` mostra tudo vinculado a `127.0.0.1`;
 6. dev observability: Grafana responde em loopback, Loki está healthy, um log
-   real chega ao Loki via Vector e nenhum serviço monta Docker socket;
+   real chega ao Loki via Vector, Prometheus coleta o Backend pela
+   `metrics-net` e nenhum serviço monta Docker socket;
 7. `git diff --check` e leitura do diff final (nenhum segredo).

@@ -32,6 +32,9 @@
 | Egress | Rede `egress` para saída externa (R2, ViaCEP, Supabase, SMTP) | Separa tráfego interno de saída |
 | Dev | Portas publicadas somente em `127.0.0.1` | Nada do stack local fica exposto na LAN |
 | Management do Back | Porta 8081 nunca roteada pelo túnel | Actuator só para diagnóstico interno |
+| Back↔Prometheus | Rede Docker dedicada `metrics-net` (`internal: true`), Backend em `10.254.20.10` e Prometheus em `10.254.20.20` | O scrape é uma comunicação técnica separada da API e da `radar-net`; não há publish de 8081 |
+| Coleta local de métricas | Prometheus sem porta publicada, target fixo `10.254.20.10:8081`, scrape a cada 15s e timeout de 5s | O bind do management do Backend ocorre somente na interface de métricas; o IP evita ambiguidade de DNS em container com múltiplas redes. `internal: true` não é firewall contra o host Docker |
+| Limite de isolamento do host | O host Docker pode alcançar diretamente o IP de bridge `10.254.20.10`; não há promessa de firewall nesse caminho | O escopo protege a superfície publicada e o tráfego entre containers; bloquear o host contra a bridge exigiria uma decisão de firewall fora desta camada (`compose/docker-compose.dev.yml:500-510`; `scripts/smoke.sh:65-73`) |
 | Logs da aplicação | **Existente — dev:** Backend em stdout/stderr ECS e containers coletados por Vector→Loki→Grafana local; **planejado — produção:** Dokploy Vector→Grafana Cloud Loki | Separar aplicação de armazenamento/consulta; não gravar arquivos no Backend nem montar Docker socket |
 
 ## Ambiente de dev/integração
@@ -43,7 +46,7 @@
 | SMTP em dev | **Mailpit** (UI em `127.0.0.1:8025`); precisa servir STARTTLS+auth — restrição de boot do Back com email habilitado (`servicos.md`); atendida com certificado dev + truststore (`scripts/gen-dev-certs.sh`) | Percorrer fluxos de email (confirmação, reset) sem provedor real |
 | Front em dev | `Dockerfile-dev` (ng serve + proxy) como padrão; imagem SSR de produção em profile `prodlike` para E2E "como se fosse produção" | Operador quer testar todos os percursos manualmente; `prodlike` depende das build-args do Front (task de pré-requisito) |
 | Nome do serviço api em dev | `backend` | `proxy.conf.json` do Front já aponta para `http://backend:8080`; evita mudança no repo Front |
-| Observabilidade local | **Existente — dev:** Loki + Vector + Grafana no Compose dev; UI somente em loopback; volumes nomeados e retenção de 7 dias | Reproduzir o contrato **planejado — produção** sem credenciais externas ou socket Docker |
+| Observabilidade local | **Existente — dev:** Loki + Vector + Prometheus + Grafana no Compose dev; UI somente em loopback; volumes nomeados e retenção de 7 dias | Reproduzir consulta de logs e métricas sem credenciais externas ou socket Docker |
 
 ## Escopo de testes
 

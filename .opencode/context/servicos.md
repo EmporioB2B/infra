@@ -12,16 +12,22 @@ estão aposentados.
 - Repo: `EmporioB2B/Backend_Java`; imagem alvo:
   `ghcr.io/emporiob2b/backend-java`.
 - Imagem: `eclipse-temurin:25-jre-jammy`, usuário `emporio` (10001),
-  `EXPOSE 8080 8081`; healthcheck da imagem:
-  `curl --fail http://127.0.0.1:8081/actuator/health`.
+  `EXPOSE 8080`; healthcheck da imagem usa o endereço injetado pelo profile
+  `container`: `curl --fail http://${MANAGEMENT_SERVER_ADDRESS}:8081/actuator/health`.
 - Portas: aplicação **8080**; management/actuator **8081** (health/info;
-  nunca rotear pelo túnel; em dev pode publicar em 127.0.0.1).
+  nunca publicar nem rotear pelo túnel; no Compose dev fica somente na
+  `metrics-net` em `10.254.20.10` e é coletada pelo Prometheus). Esse bind
+  privado não impede o host Docker de alcançar diretamente o IP da bridge;
+  não há garantia de firewall nesse caminho (`Backend_Java/Dockerfile:23-38`,
+  `Backend_Java/src/main/resources/application-container.yml:35-42`,
+  `compose/docker-compose.dev.yml:174-183,266-276`).
 - Profiles: `dev`, `test`, `container`, `prod`. Combinações vigentes:
   dev em compose `dev,container`; produção `prod,container`.
 - Envs **obrigatórias sem default** no profile `container`:
   `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`,
   `SPRING_DATASOURCE_PASSWORD`, `APP_JWT_SECRET`,
-  `APP_CORS_ALLOWED_ORIGINS`, `RADAR_BASE_URL`.
+  `APP_CORS_ALLOWED_ORIGINS`, `RADAR_BASE_URL`,
+  `MANAGEMENT_SERVER_ADDRESS`.
   No profile `prod` soma-se `APP_PASSWORD_RESET_BASE_URL`.
 - Envs relevantes por escopo:
   - Radar: `RADAR_BASE_URL` (dev/prod: `http://radar:8000`),
@@ -163,7 +169,8 @@ estão aposentados.
   `angular.json` (hoje `["localhost"]`) — incluir domínio público é
   pré-requisito de deploy (task no repo Front).
 - Imagem dev: `Dockerfile-dev` (`ng serve` em 4200, hot-reload,
-  `proxy.conf.json` → `http://backend:8080`). Não publicar.
+  `proxy.conf.json` → `http://backend:8080`); no Compose dev publica somente
+  em `127.0.0.1:4200`.
 - Verificação canônica: `npm run lint`, `npm run typecheck`,
   `npm run test`, `npm run build`. Não há framework E2E ainda.
 
@@ -216,6 +223,13 @@ O Radar **existente — dev** não é emulado: usa o R2 de teste real (restriç�
   `start_period` de 20s e 12 tentativas; reinicia com `unless-stopped` e usa
   `json-file` rotacionado em 10 MiB/3 arquivos
   (`compose/docker-compose.dev.yml:89-114`).
+- **Existente — dev:** `prometheus` usa `prom/prometheus:v3.5.0`, sem porta
+  publicada, com healthcheck em `/-/healthy`, volume `prometheus-data` e
+  retenção local de 7 dias. Ele participa da `metrics-net` com IP
+  `10.254.20.20` e da `observability`; coleta
+  `10.254.20.10:8081/actuator/prometheus` a cada 15s com timeout de 5s.
+  O Grafana provisiona o datasource `Emporio Prometheus` apontando para
+  `http://prometheus:9090`.
 - **Existente — dev:** o Backend escreve ECS no console, separando
   `DEBUG/INFO/WARN` em stdout e `ERROR` em stderr; não há appender de arquivo
   (`Backend_Java/src/main/resources/application-container.yml:22-31`,

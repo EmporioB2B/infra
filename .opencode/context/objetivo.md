@@ -7,17 +7,21 @@ Cloudflare (túnel + domínios).
 
 ## Responsabilidades
 
-- Compose de desenvolvimento/integração: api, front, radar, postgres,
-  RustFS (emulando R2, inclusive o bucket público de fotos) e Mailpit
-  (capturando SMTP), na mesma topologia de redes da produção.
-- Compose de produção: `cloudflared`, front, api e radar; sem banco em
-  container (o PostgreSQL do Back é o Supabase externo).
-- CI/CD: padrão de GitHub Actions por repositório de aplicação (testes,
-  build de imagem, push no GHCR e deploy via API do Dokploy).
-- Borda Cloudflare: túnel para `emporiob2b.com.br` (front) e
-  `api.emporiob2b.com.br` (api); `media.emporiob2b.com.br` resolve para o
-  bucket público do R2 sem passar pela VPS.
-- Runbooks: deploy, rollback, smoke tests e gestão de segredos.
+- Compose de desenvolvimento/integração (**existente — dev**): api, front,
+  radar, postgres, RustFS (emulando R2, inclusive o bucket público de fotos),
+  Mailpit (capturando SMTP) e observabilidade local (Vector, Loki, Prometheus
+  e Grafana), na mesma topologia principal de redes da produção planejada.
+- Compose de produção (**planejado — produção**): `cloudflared`, front, api e
+  radar; sem banco em container (o PostgreSQL do Back é o Supabase externo).
+- CI/CD (**planejado — workflows deste repositório ainda não existentes**):
+  padrão de GitHub Actions por repositório de aplicação (testes, build de
+  imagem, push no GHCR e deploy via API do Dokploy).
+- Borda Cloudflare (**planejado — produção**): túnel para
+  `emporiob2b.com.br` (front) e `api.emporiob2b.com.br` (api);
+  `media.emporiob2b.com.br` resolve para o bucket público do R2 sem passar
+  pela VPS.
+- Runbooks: smoke tests (**existente — dev**); deploy, rollback e gestão de
+  segredos (**planejado — produção**).
 
 ## Limites
 

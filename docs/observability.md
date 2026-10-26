@@ -43,9 +43,34 @@ abra **Explore** e consulte, por exemplo:
 {environment="dev", container=~".*backend.*"}
 ```
 
+O datasource `Emporio Prometheus` também é provisionado automaticamente. O
+Prometheus não publica porta no host: ele coleta o Backend pela `metrics-net` e
+o Grafana o consulta pela rede `observability`.
+
+```promql
+up{job="emporio-backend", environment="dev"}
+rate(radar_http_requests_total[5m])
+rate(storage_failures_total[5m])
+```
+
+O contrato local é:
+
+```text
+Backend 10.254.20.10:8081/actuator/prometheus
+        └─ metrics-net (internal)
+Prometheus 10.254.20.20
+        └─ observability ── Grafana:3000
+```
+
+O Backend não publica `8081`; `MANAGEMENT_SERVER_ADDRESS` é injetado pelo
+Compose como `10.254.20.10`. A métrica HTTP `http.server.requests` permanece
+fora do contrato atual por decisão do Backend; a allowlist de métricas
+operacionais e suas tags continua sendo responsabilidade da aplicação.
+
 As portas `GRAFANA_PORT` e `VECTOR_FLUENTD_PORT` podem ser alteradas no env
 local se houver conflito. Loki não é publicado no host; é acessado por
-Grafana e Vector na rede `observability`.
+Grafana e Vector na rede `observability`. Prometheus também não é publicado;
+use o Grafana ou `docker compose exec prometheus` para consultas locais.
 
 ## Produção: Grafana Cloud Loki via Dokploy
 

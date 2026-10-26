@@ -15,11 +15,11 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `cloudflare-edge`, `dokploy-deploy`, `cicd-ghcr`, `secrets-env`,
   `observability-logs`, `verification-before-completion`), histórico da análise de bootstrap e
   tarefas locais do operador em `.opencode/tasks/`.
-- **Existente — dev:** stack de desenvolvimento em
-  `compose/docker-compose.dev.yml`, com todos os serviços de longa duração,
+- **Existente — dev:** compose de desenvolvimento em
+  `compose/docker-compose.dev.yml`, definindo todos os serviços de longa duração,
   `media-gateway` local para fotos públicas, `scripts/smoke.sh`, policy
   dedicada, isolamento da `radar-net`, SMTP dev e observabilidade local
-  Vector/Loki/Grafana. Arquivos de suporte:
+  Vector/Loki/Prometheus/Grafana. Arquivos de suporte:
   `README.md` (setup dev, logs no Grafana e requisito de hosts do upload direto),
   `env/.env.dev.example` (cobre todas as
   `${VAR:?}` do compose; placeholders apenas), `scripts/up-dev.sh`,
@@ -32,8 +32,20 @@ Fotografia factual vigente. Não é cronologia de tasks.
   socket; seu healthcheck consulta a API local de liveness, enquanto a
   validação de configuração e o smoke verificam a chegada de um log do Backend
   ao Loki. O bootstrap aguarda os healthchecks
-  declarados (`compose/docker-compose.dev.yml:50-114`) e o smoke contém a prova
-  de ingestão (`scripts/smoke.sh:71-94`).
+  declarados (`scripts/up-dev.sh:82-103`; `compose/docker-compose.dev.yml:53-464`)
+  e o smoke contém a prova de ingestão (`scripts/smoke.sh:204-213`).
+- **Existente — dev:** o Backend e o Prometheus participam da `metrics-net`
+  (`internal: true`, subnet `10.254.20.0/24`); o Backend usa
+  `10.254.20.10:8081` para management e o Prometheus usa `10.254.20.20`.
+  O Prometheus não publica porta, participa também da rede `observability` e o
+  Grafana possui o datasource provisionado `Emporio Prometheus`. O bootstrap
+  limpo e o smoke foram validados; o smoke cobre health, scrape, target,
+  datasource e isolamento, e exige que `front-dev` esteja running/healthy além
+  de responder em `127.0.0.1:4200`. Restart/recuperação estão fora do escopo
+  de validação atual. O host Docker também pode alcançar
+  diretamente `10.254.20.10:8081`; `internal: true` e ausência de `ports:` não
+  constituem firewall contra o host (`scripts/smoke.sh:65-73,75-160,172-180`;
+  `compose/docker-compose.dev.yml:482-510`).
 - **Planejado — dev profile:** o perfil `prodlike` (`front-prod`) NÃO foi
   criado — bloqueado pela TASK-INFRA-002; o serviço está documentado no YAML e no
   doc.
@@ -97,7 +109,8 @@ Fotografia factual vigente. Não é cronologia de tasks.
 ## Fatos dos serviços que afetam a infra
 
 - Back serve HTTP puro em 8080 com `forward-headers-strategy: framework`;
-  actuator em 8081; profile `container` exige 6 envs sem default; profile
+  actuator em 8081; profile `container` exige 7 envs sem default, incluindo
+  `MANAGEMENT_SERVER_ADDRESS`; profile
   `prod` exige `APP_PASSWORD_RESET_BASE_URL`.
 - Radar valida o endpoint R2 como `https://<account>.r2.cloudflarestorage.com`
   (S3 local é rejeitado) e o ViaCEP como `https://viacep.com.br/ws`; não tem

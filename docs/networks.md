@@ -8,7 +8,7 @@ emuladores no lugar dos serviços externos e sem cloudflared.
                          ┌───────────────────────────────────────────┐
  host (navegador)        │  só 127.0.0.1 — nada exposto na LAN       │
     :4200 front-dev ──────┤                                           │
-    :8080/:8081 backend ──┤   default (bridge)                        │
+     :8080 backend ────────┤   default (bridge)                        │
     :9002 media-gateway ──┤     front-dev ↔ backend ↔ postgres        │
     :9000/:9001 rustfs ───┤     backend ↔ media-gateway ↔ rustfs       │
     :8025 mailpit (UI) ───┤     backend ↔ rustfs, mailpit             │
@@ -18,8 +18,11 @@ emuladores no lugar dos serviços externos e sem cloudflared.
                          │     radar → R2 de teste / ViaCEP          │
                          └───────────────────────────────────────────┘
 
-   radar-net (bridge, internal: true)   ← zona de contenção
-     backend ──http://radar:8000── radar        (SEM portas no host)
+    radar-net (bridge, internal: true)   ← zona de contenção
+      backend ──http://radar:8000── radar        (SEM portas no host)
+
+    metrics-net (bridge, internal: true)
+      backend:10.254.20.10:8081 ── prometheus:10.254.20.20
 ```
 
 ## Regras
@@ -29,7 +32,8 @@ emuladores no lugar dos serviços externos e sem cloudflared.
 | `default` | bridge | front-dev, backend, postgres, rustfs, rustfs-init, media-gateway, mailpit | tráfego interno do stack; toda publicação no host é prefixada `127.0.0.1` |
 | `radar-net` | bridge **`internal: true`** | backend, radar | única via para a API privada do Radar; sem gateway — nada entra/sai dela pelo host nem por outras redes |
 | `egress` | bridge | radar | saída controlada para o R2 de teste real e ViaCEP |
-| `observability` | bridge | vector, loki, grafana | pipeline local de logs; sem acesso a `radar-net`; Vector recebe somente pela porta de loopback publicada pelo host |
+| `observability` | bridge | vector, loki, grafana, prometheus | pipeline local de logs e consulta de métricas; sem acesso a `radar-net`; Vector recebe somente pela porta de loopback publicada pelo host |
+| `metrics-net` | bridge **`internal: true`** | backend, prometheus | único caminho do scraper para `backend:8081`; subnet `10.254.20.0/24`, gateway `10.254.20.1`; sem portas publicadas |
 
 - **Radar nunca publica porta** (`ports:` ausente em qualquer compose, dev
   ou prod) e só é alcançado por containers na `radar-net`. Enquanto o Radar
@@ -39,8 +43,9 @@ emuladores no lugar dos serviços externos e sem cloudflared.
   pela `egress` — comportamento documentado do Docker, esperado aqui.
 - O serviço da api chama-se **`backend`** em dev (e `api` em produção) de
   propósito: `proxy.conf.json` do Front aponta para `http://backend:8080`.
-- A porta de management do Back (**8081**) é publicada em dev somente em
-  `127.0.0.1` para diagnóstico; em produção **nunca** é roteada pelo túnel.
+- A porta de management do Back (**8081**) não é publicada no dev nem em
+  produção. No dev, o Backend faz bind em `10.254.20.10` e o Prometheus coleta
+  pela `metrics-net`; em produção ela nunca é roteada pelo túnel.
 - SMTP do Back → `mailpit:1025` fica na `default` (não publicada). A caixa
   de entrada local é auditada na UI `http://localhost:8025`.
 - RustFS (`:9000`) emula o R2 do Back — inclusive o bucket **público de
@@ -69,9 +74,10 @@ emuladores no lugar dos serviços externos e sem cloudflared.
   `/asset/` ou métodos de escrita. O healthcheck é `/healthz`.
 - Em produção não existe esse gateway: `media.emporiob2b.com.br` aponta
   diretamente para o bucket público R2 na borda Cloudflare.
-- O Grafana local publica somente `127.0.0.1:3000`. Loki não publica porta no
-  host; Grafana e Vector acessam-no pela rede `observability`. Os serviços de
-  aplicação enviam stdout/stderr ao Vector pelo logging driver `fluentd` em
+- O Grafana local publica somente `127.0.0.1:3000`. Loki e Prometheus não
+  publicam portas no host; Grafana, Vector e Prometheus acessam os componentes
+  de observabilidade pela rede `observability`. Os serviços de aplicação
+  enviam stdout/stderr ao Vector pelo logging driver `fluentd` em
   `127.0.0.1:24224`; nenhum serviço monta Docker socket. Detalhes e o fluxo de
   produção via Dokploy/Grafana Cloud estão em [`observability.md`](observability.md).
 
@@ -128,4 +134,17 @@ docker compose --env-file env/.env.dev -f compose/docker-compose.dev.yml \
 # a rede é interna de fato
 docker network inspect emporio-dev_radar-net \
   --format '{{json .Inspect.Options.Internal}}'                        # true
+
+# Prometheus alcança o management pela metrics-net
+docker compose --env-file env/.env.dev -f compose/docker-compose.dev.yml \
+  exec prometheus wget -q -O - http://10.254.20.10:8081/actuator/prometheus \
+  | grep '^# HELP'                                                     # deve PASSAR
+
+# Radar não alcança o management
+docker compose --env-file env/.env.dev -f compose/docker-compose.dev.yml \
+  exec radar python -c "import urllib.request; urllib.request.urlopen('http://10.254.20.10:8081/actuator/prometheus', timeout=3)" # deve FALHAR
+
+# metrics-net interna e com os dois membros esperados
+docker network inspect emporio-dev_metrics-net \
+  --format '{{.Internal}} {{range .Containers}}{{.Name}} {{end}}'       # true + backend + prometheus
 ```

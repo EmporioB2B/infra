@@ -2,7 +2,7 @@
 #
 # Ambiente local único "como se fosse produção": front, api, radar, postgres,
 # RustFS (R2 do Back, incluindo o bucket público de fotos), media-gateway,
-# Mailpit (SMTP) e observabilidade local (Vector, Loki e Grafana), com a mesma
+# Mailpit (SMTP) e observabilidade local (Vector, Loki, Prometheus e Grafana), com a mesma
 # topologia de redes da produção (docs/networks.md).
 #
 # Uso (a partir da raiz deste repo; exige os repos irmãos como vizinhos):
@@ -42,11 +42,38 @@ x-local-logging: &local-logging
     max-size: "10m"
     max-file: "3"
 
+x-backend-metrics-address: &backend-metrics-address 10.254.20.10
+
 services:
   # ---------------------------------------------------------------------------
-  # Observabilidade local. Loki/Grafana ficam somente na rede própria; apenas
-  # a UI do Grafana e a porta Fluent do Vector são publicadas em loopback.
+  # Observabilidade local. Loki/Prometheus/Grafana ficam somente nas redes
+  # próprias; apenas a UI do Grafana e a porta Fluent do Vector são publicadas
+  # em loopback.
   # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 12
+    networks:
+      metrics-net:
+        ipv4_address: 10.254.20.20
+      observability:
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *local-logging
+
   loki:
     image: grafana/loki:3.5.1
     command: ["-config.file=/etc/loki/config.yaml"]
@@ -152,6 +179,7 @@ services:
       APP_JWT_SECRET: ${APP_JWT_SECRET:?APP_JWT_SECRET obrigatória (>=256 bits; gere com openssl rand -hex 32)}
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:4200}
       RADAR_BASE_URL: http://radar:8000
+      MANAGEMENT_SERVER_ADDRESS: *backend-metrics-address
       # O default do Back (application.yml: read 1s / connect 500ms) é curto
       # para a PRIMEIRA consulta do dev: o Radar abre DuckDB+httpfs frio e a
       # query de aquecimento levou ~4,5s (evidência 2026-09-26; seguintes
@@ -220,7 +248,6 @@ services:
       APP_EMAIL_MEDIA_BASE_URL: ${APP_EMAIL_MEDIA_BASE_URL:-http://localhost:9000}
     ports:
       - "127.0.0.1:8080:8080"
-      - "127.0.0.1:8081:8081"
     volumes:
       # truststore PKCS12 com o certificado dev do Mailpit (gerado por
       # scripts/gen-dev-certs.sh; material efêmero, nunca versionado).
@@ -237,14 +264,16 @@ services:
       media-gateway:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "2", "http://127.0.0.1:8081/actuator/health"]
+      test: ["CMD-SHELL", "curl --fail --silent --show-error --max-time 2 http://$${MANAGEMENT_SERVER_ADDRESS}:8081/actuator/health"]
       interval: 5s
       timeout: 3s
       start_period: 40s
       retries: 12
     networks:
-      - default
-      - radar-net
+      default:
+      radar-net:
+      metrics-net:
+        ipv4_address: *backend-metrics-address
     restart: unless-stopped
     logging: *dev-logging
 
@@ -464,14 +493,26 @@ networks:
     # (comportamento documentado do Docker).
     driver: bridge
   observability:
-    # Loki/Grafana/Vector não precisam acessar a rede da aplicação nem
-    # radar-net; o Docker logging driver entrega eventos ao Vector via loopback.
+    # Loki/Grafana/Vector/Prometheus não precisam acessar a rede da aplicação
+    # nem radar-net. O Docker logging driver entrega eventos ao Vector via
+    # loopback; Prometheus coleta somente pela metrics-net.
     driver: bridge
+  metrics-net:
+    # A única via do Backend para o coletor de métricas. O host Docker ainda
+    # pode alcançar diretamente um IP de bridge; isso não é uma porta publicada.
+    name: emporio-dev_metrics-net
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.254.20.0/24
+          gateway: 10.254.20.1
 
 volumes:
   pgdata:
   rustfs-data:
   radar_state:
+  prometheus-data:
   loki-data:
   vector-data:
   grafana-data:
