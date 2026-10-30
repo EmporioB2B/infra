@@ -3,6 +3,9 @@ global:
   scrape_timeout: 5s
   evaluation_interval: 15s
 
+# A retenção temporal é deliberadamente fixa no dev; o WAL comprimido é
+# habilitado no Compose para reduzir o custo do volume nomeado.
+
 scrape_configs:
   - job_name: emporio-backend
     metrics_path: /actuator/prometheus

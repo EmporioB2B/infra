@@ -1,0 +1,291 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "panels": [],
+      "title": "Disponibilidade",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 1},
+      "id": 2,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "targets": [{"expr": "up{job=\"emporio-backend\"}", "legendFormat": "{{service}}", "refId": "A"}],
+      "title": "Backend target",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 1},
+      "id": 3,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "targets": [{"expr": "process_uptime_seconds{job=\"emporio-backend\"}", "legendFormat": "uptime", "refId": "A"}],
+      "title": "Processo ativo",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 8},
+      "id": 4,
+      "panels": [],
+      "title": "JVM, processo e sistema",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 9},
+      "id": 5,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "process_cpu_usage{job=\"emporio-backend\"}", "legendFormat": "process CPU", "refId": "A"},
+        {"expr": "system_cpu_usage{job=\"emporio-backend\"}", "legendFormat": "system CPU", "refId": "B"},
+        {"expr": "system_load_average_1m{job=\"emporio-backend\"}", "legendFormat": "load 1m", "refId": "C"}
+      ],
+      "title": "CPU e carga",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 9},
+      "id": 6,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "jvm_threads_live_threads{job=\"emporio-backend\"}", "legendFormat": "threads live", "refId": "A"},
+        {"expr": "jvm_threads_daemon_threads{job=\"emporio-backend\"}", "legendFormat": "threads daemon", "refId": "B"},
+        {"expr": "jvm_classes_loaded_classes{job=\"emporio-backend\"}", "legendFormat": "classes", "refId": "C"},
+        {"expr": "system_cpu_count{job=\"emporio-backend\"}", "legendFormat": "cpus", "refId": "D"}
+      ],
+      "title": "Threads, classes e cpus",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 16},
+      "id": 50,
+      "panels": [],
+      "title": "Memória (heap da JVM — não é RSS do container)",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 17},
+      "id": 51,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "jvm_heap_used_bytes{job=\"emporio-backend\"}", "legendFormat": "heap usada", "refId": "A"},
+        {"expr": "jvm_heap_max_bytes{job=\"emporio-backend\"}", "legendFormat": "heap máxima", "refId": "B"}
+      ],
+      "title": "Heap JVM usada / máxima",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 17},
+      "id": 52,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "targets": [
+        {"expr": "jvm_heap_used_bytes{job=\"emporio-backend\"} / jvm_heap_max_bytes{job=\"emporio-backend\"}", "legendFormat": "% heap", "refId": "A"}
+      ],
+      "title": "Heap ocupada (%)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 24},
+      "id": 7,
+      "panels": [],
+      "title": "Hikari e executores",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 25},
+      "id": 8,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "hikaricp_connections_active{job=\"emporio-backend\"}", "legendFormat": "active {{pool}}", "refId": "A"},
+        {"expr": "hikaricp_connections_idle{job=\"emporio-backend\"}", "legendFormat": "idle {{pool}}", "refId": "B"},
+        {"expr": "hikaricp_connections_pending{job=\"emporio-backend\"}", "legendFormat": "pending {{pool}}", "refId": "C"},
+        {"expr": "increase(hikaricp_connections_timeout_total{job=\"emporio-backend\"}[5m])", "legendFormat": "timeout +5m {{pool}}", "refId": "D"}
+      ],
+      "title": "Conexões Hikari",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 25},
+      "id": 9,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "executor_active_threads{job=\"emporio-backend\"}", "legendFormat": "active {{name}}", "refId": "A"},
+        {"expr": "executor_queued_tasks{job=\"emporio-backend\"}", "legendFormat": "queued {{name}}", "refId": "B"},
+        {"expr": "executor_pool_size_threads{job=\"emporio-backend\"}", "legendFormat": "pool {{name}}", "refId": "C"},
+        {"expr": "increase(executor_rejections_total{job=\"emporio-backend\"}[5m])", "legendFormat": "rejeições +5m {{name}}", "refId": "D"}
+      ],
+      "title": "Executores",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 32},
+      "id": 10,
+      "panels": [],
+      "title": "Operações de aplicação (taxa)",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 33},
+      "id": 11,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "sum by (operation, outcome) (rate(radar_http_requests_total{job=\"emporio-backend\"}[5m]))", "legendFormat": "Radar {{operation}} / {{outcome}}", "refId": "A"},
+        {"expr": "sum by (operation, outcome) (rate(storage_operations_total{job=\"emporio-backend\"}[5m]))", "legendFormat": "Storage {{operation}} / {{outcome}}", "refId": "B"},
+        {"expr": "sum by (stage, outcome) (rate(email_delivery_attempts_total{job=\"emporio-backend\"}[5m]))", "legendFormat": "Email {{stage}} / {{outcome}}", "refId": "C"}
+      ],
+      "title": "Radar, storage e email",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 33},
+      "id": 12,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "sum by (operation, outcome) (rate(notificacao_operations_total{job=\"emporio-backend\"}[5m]))", "legendFormat": "Notificação {{operation}} / {{outcome}}", "refId": "A"},
+        {"expr": "sum by (operation, outcome) (rate(catalogo_produto_publicacao_total{job=\"emporio-backend\"}[5m]))", "legendFormat": "Catálogo {{operation}} / {{outcome}}", "refId": "B"},
+        {"expr": "sum by (operation, outcome) (rate(catalogo_produto_imagem_operacoes_total{job=\"emporio-backend\"}[5m]))", "legendFormat": "Imagem {{operation}} / {{outcome}}", "refId": "C"}
+      ],
+      "title": "Notificações, catálogo e imagens",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 41},
+      "id": 13,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "sum by (operation) (rate(radar_http_duration_seconds_sum{job=\"emporio-backend\"}[5m])) / sum by (operation) (rate(radar_http_duration_seconds_count{job=\"emporio-backend\"}[5m]))", "legendFormat": "Radar média {{operation}}", "refId": "A"},
+        {"expr": "sum by (operation) (rate(storage_operation_duration_seconds_sum{job=\"emporio-backend\"}[5m])) / sum by (operation) (rate(storage_operation_duration_seconds_count{job=\"emporio-backend\"}[5m]))", "legendFormat": "Storage média {{operation}}", "refId": "B"},
+        {"expr": "sum by (operation) (rate(notificacao_operation_duration_seconds_sum{job=\"emporio-backend\"}[5m])) / sum by (operation) (rate(notificacao_operation_duration_seconds_count{job=\"emporio-backend\"}[5m]))", "legendFormat": "Notificação média {{operation}}", "refId": "C"},
+        {"expr": "max by (operation) (radar_http_duration_seconds_max{job=\"emporio-backend\"})", "legendFormat": "Radar máx {{operation}}", "refId": "D"}
+      ],
+      "title": "Latência operacional (média e máx — contrato sem buckets/percentis)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 49},
+      "id": 60,
+      "panels": [],
+      "title": "HTTP RED (API curada)",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 50},
+      "id": 61,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "sum by (outcome) (rate(http_server_requests_total{job=\"emporio-backend\"}[5m]))", "legendFormat": "{{outcome}}", "refId": "A"}
+      ],
+      "title": "Vazão por outcome",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 50},
+      "id": 62,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "sum by (status_class) (rate(http_server_requests_total{job=\"emporio-backend\"}[5m]))", "legendFormat": "{{status_class}}", "refId": "A"}
+      ],
+      "title": "Vazão por status_class",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 50},
+      "id": 63,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "sum(rate(http_server_duration_seconds_sum{job=\"emporio-backend\"}[5m])) / sum(rate(http_server_duration_seconds_count{job=\"emporio-backend\"}[5m]))", "legendFormat": "média", "refId": "A"},
+        {"expr": "max by (status_class) (http_server_duration_seconds_max{job=\"emporio-backend\"})", "legendFormat": "máx {{status_class}}", "refId": "B"}
+      ],
+      "title": "Duração HTTP (média e máx)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 58},
+      "id": 64,
+      "panels": [],
+      "title": "Servidor (Tomcat)",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 59},
+      "id": 65,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "tomcat_threads_busy{job=\"emporio-backend\"}", "legendFormat": "busy", "refId": "A"},
+        {"expr": "tomcat_threads_current{job=\"emporio-backend\"}", "legendFormat": "current", "refId": "B"},
+        {"expr": "tomcat_threads_config_max{job=\"emporio-backend\"}", "legendFormat": "config max", "refId": "C"}
+      ],
+      "title": "Threads Tomcat",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 59},
+      "id": 66,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "tomcat_connections_current{job=\"emporio-backend\"}", "legendFormat": "current", "refId": "A"},
+        {"expr": "tomcat_connections_config_max{job=\"emporio-backend\"}", "legendFormat": "config max", "refId": "B"}
+      ],
+      "title": "Conexões Tomcat",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["emporio", "dev", "prometheus"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Emporio B2B — Backend",
+  "uid": "emporio-backend-dev",
+  "version": 2,
+  "weekStart": ""
+}

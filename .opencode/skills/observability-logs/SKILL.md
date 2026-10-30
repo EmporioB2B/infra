@@ -41,6 +41,29 @@ configura um provider Grafana Loki e seleciona a VPS; o Dokploy instala o
 - a configuração precisa de egress HTTPS e não deve conectar o Vector à
   `radar-net`.
 
+## Métricas (fronteira consumida pela Infra)
+
+O contrato de métricas é de responsabilidade do Backend (`servicos.md` é a fonte
+da verdade dos nomes/labels); a Infra só consome o que chega ao scrape. Regras
+comportamentais ao desenhar/rever painéis e validações:
+
+- **HTTP RED curado existe** (`http_server_requests_total`,
+  `http_server_duration_seconds_{count,sum,max}`, labels
+  `route_template/method/status_class/outcome`); o binder **cru**
+  `http.server.requests`/`http_server_requests_seconds` continua **excluído**.
+  Não escrever que "HTTP está fora do contrato" de forma absoluta. Séries só
+  aparecem após tráfego em `/api`.
+- **Sem buckets/percentis** (`*_bucket` não existe) → latência em média
+  (`rate(sum)/rate(count)`) e máx (`*_max`); **nunca** `histogram_quantile`.
+- **Memória:** apenas heap agregada da JVM (`jvm_heap_used_bytes`/`jvm_heap_max_bytes`).
+  Sem `jvm_memory_*` por pool, buffer, GC pause, `disk.*`. **RSS do container não é
+  observável hoje** — depende de `process_memory_rss_bytes`/`micrometer-jvm-extras`
+  que o Backend ainda não instrumenta: é **pendência do repo Java**, não recurso
+  existente; não simular painel de RSS.
+- O validador de cardinalidade da Infra (fronteira) não duplica a allowlist
+  finita de valores do Backend; apenas veta labels fora do vocabulário e valores
+  com URL/e-mail/UUID.
+
 ## Segurança e operação
 
 - nunca usar Dozzle ou qualquer coletor que monte Docker socket no stack oficial;

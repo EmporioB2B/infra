@@ -118,4 +118,22 @@ http://127.0.0.1:3000
 O login usa `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD` do env local. Os
 datasources Loki e Prometheus já vêm provisionados; consulte
 [`docs/observability.md`](docs/observability.md) para as queries e para o
-procedimento de produção via Grafana Cloud/Dokploy.
+procedimento de produção via Grafana Cloud/Dokploy. O dashboard
+`Emporio B2B — Backend` é provisionado automaticamente na pasta `Emporio B2B` e
+cobre disponibilidade, CPU/sistema, **heap da JVM**, Hikari, executores, HTTP
+RED curado da API, servidor Tomcat e as operações de Radar/storage/email/
+notificação/catálogo. **A memória real do container (RSS) ainda não é
+observável** — depende de instrumentação pendente no Backend (ver doc).
+
+Para testar restart do coletor e recuperação de um target sem remover volumes:
+
+```bash
+scripts/metrics-resilience.sh
+```
+
+Para confirmar que o dashboard auto-provisiona (Grafana descartável de banco
+limpo, sem tocar no seu `grafana-data`):
+
+```bash
+scripts/check-grafana-provisioning.sh
+```

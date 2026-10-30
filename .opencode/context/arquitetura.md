@@ -108,9 +108,9 @@ volumes:
 - **Existente — dev:** o Backend mantém ECS JSON em stdout/stderr e os serviços
   de aplicação e emuladores de longa duração usam o driver Docker `fluentd`
   assíncrono para o Vector local
-  (`Backend_Java/src/main/resources/application-container.yml:22-31`,
+  (`Backend_Java/src/main/resources/application-container.yml:24-33`,
   `Backend_Java/src/main/resources/logback-spring.xml:7-42`,
-  `compose/docker-compose.dev.yml:25-43,53-75,77-114,116-141,147-163,170-278,288-312,321-372,381-406,413-435,443-464`). Loki,
+  `compose/docker-compose.dev.yml:25-35,151-172,174-282,292-316,325-355,385-410,417-439,447-468`). Loki,
   Vector, Prometheus e Grafana usam `json-file` rotacionado para não formar um
   ciclo de coleta.
   Nenhum serviço monta `/var/run/docker.sock`.
@@ -119,21 +119,45 @@ volumes:
   `loki-data`; o Vector possui buffer de sink em disco em `vector-data`.
 - **Existente — dev:** o Prometheus `prom/prometheus:v3.5.0` coleta
   `10.254.20.10:8081/actuator/prometheus` pela `metrics-net` interna, sem porta
-  publicada, e o Grafana provisiona o datasource `Emporio Prometheus` pela
-  rede `observability`. A retenção local configurada é de 7 dias no volume
-  `prometheus-data`. O bootstrap limpo foi validado por `scripts/up-dev.sh` e o
-  smoke cobre health, scrape, target, datasource, isolamento e exige
-  `front-dev` running/healthy além do HTTP local; restart/recuperação estão
-  fora do escopo de validação atual.
-  (`compose/prometheus/prometheus.yml:1-14`,
-  `compose/grafana/provisioning/datasources/prometheus.yaml:3-10`,
-  `scripts/up-dev.sh:82-103`, `scripts/smoke.sh:56-160,172-180`).
+  publicada, e o Grafana provisiona o datasource `Emporio Prometheus`
+  (uid `emporio-prometheus`) pela rede `observability`. A retenção local
+  configurada é de 7 dias no volume `prometheus-data`, com WAL comprimido. O
+  healthcheck usa `/-/ready` e o smoke também valida `/-/healthy`; o dashboard
+  `emporio-backend-dev` é montado e provisionado de arquivo (provider com
+  `updateIntervalSeconds: 30`, `allowUiUpdates: false`), e
+  `scripts/check-grafana-provisioning.sh` prova o autoprovisionamento num
+  Grafana descartável de banco vazio. O script de resiliência cobre restart do
+  coletor, preservação do nome do volume e do hash da configuração, além do
+  retorno do target `up` de 0 para 1 e a preservação de uma amostra histórica
+  de `process_start_time_seconds`.
+  O scrape carrega o **contrato de métricas vigente do Backend**
+  (`servicos.md`, seção Backend_Java): HTTP **RED curado** presente
+  (`http_server_requests_total` + `http_server_duration_seconds` com labels
+  `route_template,method,status_class,outcome`), enquanto o binder cru
+  `http_server_requests_seconds`, `disk_*`, `jvm_memory_*` por pool, GC pause e
+  as famílias Tomcat de sessão/keepalive/cache/global continuam **excluídos**;
+  heap e Tomcat aparecem como agregados **sem labels**; timers não têm
+  buckets/percentis, então painéis usam média/máx, nunca
+  `histogram_quantile`; RSS do container não é observável — pendência de
+  instrumentação em `Backend_Java`, não decisão da Infra. O smoke veta só a
+  família crua e prova a heap; a cardinalidade da fronteira é validada por
+  allowlist de chaves de label (inclui `route_template`/`method`) sem
+  duplicar os valores de domínio do Backend.
+  (`compose/docker-compose.dev.yml:53-76,119-145`,
+  `compose/prometheus/prometheus.yml:1-17`,
+  `compose/grafana/provisioning/dashboards/provider.yaml:1-12`,
+  `compose/grafana/dashboards/emporio-backend.json:21-287`,
+  `scripts/smoke.sh:80-115,221-256`, `scripts/metrics-resilience.sh:45-84`,
+  `scripts/check-metrics-cardinality.py:13-30`,
+  `scripts/check-grafana-provisioning.sh:1-21`,
+  `Backend_Java/src/main/java/br/com/emporio/infrastructure/config/MetricsConfiguration.java:114-127,284-298`,
+  `Backend_Java/src/main/java/br/com/emporio/infrastructure/observability/HttpMetricsFilter.java:33-34,81-89`).
 - **Existente — dev:** `metrics-net` é `internal: true` e não publica 8081,
   mas isso não é firewall contra o próprio host Docker: o host pode alcançar
   diretamente `10.254.20.10:8081`. A arquitetura não promete bloquear esse
   acesso; a contenção verificada é entre containers e por ausência de publish
-  (`compose/docker-compose.dev.yml:266-278,482-510`,
-  `scripts/smoke.sh:65-73,91-99`).
+  (`compose/docker-compose.dev.yml:276-281,504-513`,
+  `scripts/smoke.sh:62-78,139-150`).
 - **Planejado — produção:** o Dokploy configura `Settings → Logs & Metrics`
   com provider Grafana Loki; o `dokploy-vector` envia os logs dos containers
   para o endpoint HTTPS. O Dokploy não instala Loki/Grafana Cloud e nenhum
@@ -154,9 +178,9 @@ volumes:
   navegador local. O gateway escuta na porta 80 do container, responde health
   em `/healthz`, aceita apenas `GET`/`HEAD` em `/public/asset/` e não
   encaminha privado, quarentena, raiz de bucket ou métodos de escrita (fontes:
-  `compose/docker-compose.dev.yml:266-291`,
+  `compose/docker-compose.dev.yml:385-415`,
   `compose/media-gateway.nginx.conf:16-37`,
-  `env/.env.dev.example:59-65`).
+  `env/.env.dev.example:69-73`).
 - **Existente — dev:** o `imageBaseUrl` do Front continua compilado conforme
   o bundle do Front; o media-gateway atende a base pública configurada pelo
   Back, não altera essa configuração do Front.

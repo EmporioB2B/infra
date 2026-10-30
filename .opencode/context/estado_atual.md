@@ -31,21 +31,42 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `loki-data`, `vector-data` e `grafana-data`. O Vector também não monta o
   socket; seu healthcheck consulta a API local de liveness, enquanto a
   validação de configuração e o smoke verificam a chegada de um log do Backend
-  ao Loki. O bootstrap aguarda os healthchecks
-  declarados (`scripts/up-dev.sh:82-103`; `compose/docker-compose.dev.yml:53-464`)
-  e o smoke contém a prova de ingestão (`scripts/smoke.sh:204-213`).
+  ao Loki. O bootstrap aguarda os healthchecks declarados
+  (`scripts/up-dev.sh:82-103`; `compose/docker-compose.dev.yml:53-485`)
+  e o smoke contém a prova de ingestão (`scripts/smoke.sh:300-308`).
 - **Existente — dev:** o Backend e o Prometheus participam da `metrics-net`
   (`internal: true`, subnet `10.254.20.0/24`); o Backend usa
   `10.254.20.10:8081` para management e o Prometheus usa `10.254.20.20`.
-  O Prometheus não publica porta, participa também da rede `observability` e o
-  Grafana possui o datasource provisionado `Emporio Prometheus`. O bootstrap
-  limpo e o smoke foram validados; o smoke cobre health, scrape, target,
-  datasource e isolamento, e exige que `front-dev` esteja running/healthy além
-  de responder em `127.0.0.1:4200`. Restart/recuperação estão fora do escopo
-  de validação atual. O host Docker também pode alcançar
+  O Prometheus não publica porta, participa também da rede `observability`,
+  mantém retenção de 7 dias com WAL comprimido no volume `prometheus-data` e o
+  Grafana possui o datasource `emporio-prometheus` e o dashboard
+  `emporio-backend-dev` provisionados por arquivo (provider com
+  `updateIntervalSeconds: 30`, `allowUiUpdates: false`). O bootstrap
+  aguarda os healthchecks declarados; o smoke contém checks de health/readiness
+  (`/-/healthy` e `/-/ready` do coletor), scrape, target, datasource,
+  dashboard, cardinalidade, logs e isolamento, veta no scrape somente a família
+  crua `http_server_requests_seconds` e `disk_*` — não o RED curado, que é
+  legítimo —, prova a heap agregada `jvm_heap_used_bytes` e valida o HTTP RED
+  quando há tráfego `/api` desde o boot; ainda exige que `front-dev` esteja
+  running/healthy além de responder em `127.0.0.1:4200`.
+  `scripts/metrics-resilience.sh` cobre restart/recuperação sem remoção de
+  volume, verificando identidade do volume, hash da configuração e transição do
+  target `up` de 0 para 1, além da persistência de uma amostra histórica de
+  `process_start_time_seconds`; `scripts/check-grafana-provisioning.sh` prova o
+  autoprovisionamento do dashboard num Grafana descartável de banco vazio, sem
+  tocar o `grafana-data` do dev. O dashboard está alinhado ao contrato vigente
+  do Backend (`servicos.md`, seção Backend_Java): HTTP RED curado, latência por
+  média/máx (nenhuma série `*_bucket` no scrape — `histogram_quantile` não
+  funciona), heap/Tomcat agregados sem labels, Hikari e executores; o painel de
+  classes carregadas usa a série observada `jvm_classes_loaded_classes`, e o
+  teste do Backend é que afirma o prefixo `jvm_classes_loaded_count` no scrape
+  (`MetricsConfigurationTest.java:621-624`). O checker de cardinalidade da
+  Infra (`scripts/check-metrics-cardinality.py`) mantém allowlist de chaves de
+  label da fronteira — incluindo `route_template` e `method` — sem duplicar os
+  valores de domínio do Backend. O host Docker também pode alcançar
   diretamente `10.254.20.10:8081`; `internal: true` e ausência de `ports:` não
-  constituem firewall contra o host (`scripts/smoke.sh:65-73,75-160,172-180`;
-  `compose/docker-compose.dev.yml:482-510`).
+  constituem firewall contra o host (`scripts/smoke.sh:62-78,80-115,221-256`;
+  `compose/docker-compose.dev.yml:504-513`).
 - **Planejado — dev profile:** o perfil `prodlike` (`front-prod`) NÃO foi
   criado — bloqueado pela TASK-INFRA-002; o serviço está documentado no YAML e no
   doc.
@@ -58,9 +79,9 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `APP_STORAGE_R2_PUBLICO_BASE_URL=http://localhost:9002` em dev; a URL pública
   de fotos é utilizável pelo navegador. O RustFS continua sendo acessado
   diretamente pelo navegador apenas para upload pré-assinado, com o hostname
-  `rustfs:9000` (fontes: `compose/docker-compose.dev.yml:266-291`,
+  `rustfs:9000` (fontes: `compose/docker-compose.dev.yml:385-415`,
   `compose/media-gateway.nginx.conf:16-37`,
-  `env/.env.dev.example:59-65`).
+  `env/.env.dev.example:69-73`).
 - Existe `scripts/seed-admin-dev.sh` para o stack local: ele semeia, em uma
   transação, o usuário de teste, o vínculo `ATIVO` na organização
   `PLATAFORMA`, o papel `ADMIN_NEGOCIO`/`PLATAFORMA` e as nove capacidades
@@ -112,6 +133,15 @@ Fotografia factual vigente. Não é cronologia de tasks.
   actuator em 8081; profile `container` exige 7 envs sem default, incluindo
   `MANAGEMENT_SERVER_ADDRESS`; profile
   `prod` exige `APP_PASSWORD_RESET_BASE_URL`.
+- Contrato de métricas do Backend verificado no código-fonte do irmão e no
+  scrape dev: HTTP **RED curado** (`http_server_requests_total` +
+  `http_server_duration_seconds`, labels `route_template,method,status_class,outcome`)
+  existe, enquanto o binder cru `http_server_requests_seconds` e as famílias
+  `disk_*`/`jvm_memory_*`/GC pause/`jvm.info` continuam excluídos; timers sem
+  buckets/percentis; heap e Tomcat agregados sem labels; Hikari com pools
+  finitos (`emporio-pool|emporio-test-pool|emporio-b2b-pool`) e
+  `executor_rejections_total` por executor de email (detalhes com fontes em
+  `servicos.md`, seção Backend_Java).
 - Radar valida o endpoint R2 como `https://<account>.r2.cloudflarestorage.com`
   (S3 local é rejeitado) e o ViaCEP como `https://viacep.com.br/ws`; não tem
   autenticação de entrada; estado em SQLite reconstruível.
@@ -146,6 +176,13 @@ Fotografia factual vigente. Não é cronologia de tasks.
   Grafana Cloud no Dokploy como pendência de produção.
   TASK-INFRA-009 tem wiring dev e gates runtime validados; o handoff
   [PLANEJADO — produção] continua sem aplicação no R2.
+- Memória real do container (RSS) **não é observável** no Grafana local: a
+  série `process_memory_rss_bytes` exige instrumentação
+  `micrometer-jvm-extras` que o `Backend_Java` ainda não possui, e o filtro
+  `MetricsConfiguration` rejeita nomes não inventariados. É pendência futura
+  do repositório Java (dependência registrada), **não** decisão ou limitação
+  de topologia da Infra; até lá os painéis de memória usam a heap agregada da
+  JVM.
 - Backlog futuro (não bloqueia o MVP de deploy): mTLS/gateway interno do
   Radar (TASK-080/006 no repo Back e TASK-006 no repo Radar), staging,
   monitoramento/uptime, backup do Supabase, entrada do Hermes no stack,

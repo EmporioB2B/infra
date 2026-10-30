@@ -14,15 +14,61 @@ estão aposentados.
 - Imagem: `eclipse-temurin:25-jre-jammy`, usuário `emporio` (10001),
   `EXPOSE 8080`; healthcheck da imagem usa o endereço injetado pelo profile
   `container`: `curl --fail http://${MANAGEMENT_SERVER_ADDRESS}:8081/actuator/health`.
-- Portas: aplicação **8080**; management/actuator **8081** (health/info;
-  nunca publicar nem rotear pelo túnel; no Compose dev fica somente na
-  `metrics-net` em `10.254.20.10` e é coletada pelo Prometheus). Esse bind
-  privado não impede o host Docker de alcançar diretamente o IP da bridge;
-  não há garantia de firewall nesse caminho (`Backend_Java/Dockerfile:23-38`,
+- Portas: aplicação **8080**; management/actuator **8081** (expõe
+  `health,info,prometheus` no profile `container`; nunca publicar nem rotear
+  pelo túnel; no Compose dev fica somente na `metrics-net` em
+  `10.254.20.10` e é coletada pelo Prometheus). Esse bind privado não impede o
+  host Docker de alcançar diretamente o IP da bridge; não há garantia de
+  firewall nesse caminho (`Backend_Java/Dockerfile:23-38`,
   `Backend_Java/src/main/resources/application-container.yml:35-42`,
-  `compose/docker-compose.dev.yml:174-183,266-276`).
+  `compose/docker-compose.dev.yml:174-183,270-280,504-513`).
 - Profiles: `dev`, `test`, `container`, `prod`. Combinações vigentes:
   dev em compose `dev,container`; produção `prod,container`.
+- **Contrato de métricas do Backend (existente, verificado no código-fonte do
+  irmão e no scrape dev; a Infra consome, não é dona dos valores de domínio)**
+  via `/actuator/prometheus` (8081):
+  - HTTP **RED curado** próprio: `http_server_requests_total` (Counter) +
+    `http_server_duration_seconds` (Timer, exposto como `_count`/`_sum`/`_max`)
+    com exatamente as labels `route_template,method,status_class,outcome`;
+    `route_template` é template do catálogo Spring MVC (com `{var}`) ou
+    `unknown`; `/actuator/**` fica fora do filtro; as séries só materializam
+    após tráfego em `/api`
+    (`Backend_Java/src/main/java/br/com/emporio/infrastructure/observability/HttpMetricsFilter.java:33-34,57-60,81-89,214-233`,
+    `Backend_Java/src/main/java/br/com/emporio/infrastructure/config/MetricsConfiguration.java:284-298`).
+  - O binder cru `http.server.requests` (`http_server_requests_seconds`)
+    **continua excluído (deny)**, junto com `disk.free|total`, `jvm.memory.*`
+    por pool, `jvm.buffer.*`, `jvm.gc.pause`, `jvm.info` e as famílias Tomcat
+    de sessões/keepalive/cache/global/servlet; o `MeterFilter` rejeita todo
+    nome não inventariado (deny-by-default)
+    (`MetricsConfiguration.java:114-127,165-179,202-205`). HTTP **não** está
+    "fora do contrato": o que não existe é o binder cru; o RED curado existe.
+  - Heap agregada da JVM disponível, **sem labels**: `jvm_heap_used_bytes` e
+    `jvm_heap_max_bytes` (o máximo pode ser `NaN` quando a JVM não reporta
+    máximo)
+    (`Backend_Java/src/main/java/br/com/emporio/infrastructure/config/RuntimeMetricsConfiguration.java:110-119,126-128`).
+  - Timers exportados **sem buckets/percentis** (nenhum `publishPercentiles`
+    no código, nenhum `management.metrics.distribution` nos resources):
+    `histogram_quantile` não funciona; latência se mede por **média**
+    (`_sum`/`_count`) e **máx** (`*_max`), que é o contrato dos painéis.
+  - Tomcat agregado disponível **sem labels** (soma dos MBeans dos conectores):
+    `tomcat_threads_busy|current|config_max`,
+    `tomcat_connections_current|config_max`
+    (`RuntimeMetricsConfiguration.java:133-138`,
+    `MetricsConfiguration.java:98-100,186-188`).
+  - Hikari com pool finito permitido: `emporio-pool` (dev),
+    `emporio-test-pool` (test), `emporio-b2b-pool` (container/prod)
+    (`MetricsConfiguration.java:94-95,196-198`,
+    `application-dev.yml:10`, `application-test.yml:10`,
+    `application-container.yml:8`).
+  - Executors: `executor_rejections_total{name=...}` com `name` ∈
+    `emailTaskExecutor|emailResultTaskExecutor`
+    (`Backend_Java/src/main/java/br/com/emporio/infrastructure/email/config/EmailExecutorConfiguration.java:27-28,96-104`,
+    `MetricsConfiguration.java:96-97,133-135,199-201`).
+  - **Limite (pendência do repo `Backend_Java`, não decisão da Infra):**
+    memória real do container (RSS) **não é observável** —
+    `process_memory_rss_bytes` não é emitido (não há dependência
+    `micrometer-jvm-extras` no `pom.xml` e o filtro deny rejeitaria o nome não
+    inventariado). Para memória, use a heap agregada.
 - Envs **obrigatórias sem default** no profile `container`:
   `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`,
   `SPRING_DATASOURCE_PASSWORD`, `APP_JWT_SECRET`,
@@ -69,7 +115,7 @@ estão aposentados.
     configuração é somente-leitura e o serviço fica apenas na rede `default`.
     Aceita `GET`/`HEAD` exclusivamente em `/public/asset/`, rejeita
     escrita e não roteia buckets privado/quarentena ou listagem
-    (`compose/docker-compose.dev.yml:266-291`;
+    (`compose/docker-compose.dev.yml:385-415`;
     `compose/media-gateway.nginx.conf:16-37`; o teste de integração do Back
     aguarda `/healthz` na porta 80 e confirma a URL pública opaca em
     `Backend_Java/src/test/java/br/com/emporio/infrastructure/storage/provider/RustFsStorageIT.java:144-151,348-414`).
@@ -205,7 +251,7 @@ O Radar **existente — dev** não é emulado: usa o R2 de teste real (restriç�
   (`compose/loki/config.yaml:3-4,28-38`). O healthcheck consulta `/ready` a cada
   5s, com `start_period` de 10s e 12 tentativas; reinicia com
   `unless-stopped` e usa `json-file` rotacionado em 10 MiB/3 arquivos
-  (`compose/docker-compose.dev.yml:56-65`).
+  (`compose/docker-compose.dev.yml:78-93`).
 - **Existente — dev:** `vector` usa `timberio/vector:0.49.0-alpine`, recebe o
   protocolo Fluent em `24224` publicado somente como
   `127.0.0.1:${VECTOR_FLUENTD_PORT:-24224}`, tenta parsear o JSON dos eventos e
@@ -214,7 +260,7 @@ O Radar **existente — dev** não é emulado: usa o R2 de teste real (restriç�
   healthcheck; a validação estática de configuração é feita separadamente no
   gate (`vector validate --skip-healthchecks`). O serviço reinicia com
   `unless-stopped`, usando `json-file` rotacionado em 10 MiB/3 arquivos
-  (`compose/docker-compose.dev.yml:67-87`). Não monta Docker socket.
+  (`compose/docker-compose.dev.yml:95-117`). Não monta Docker socket.
 - **Existente — dev:** `grafana` usa `grafana/grafana:12.0.0`, publica a UI
   somente em `127.0.0.1:${GRAFANA_PORT:-3000}`, provisiona o datasource Loki e
   persiste dados no volume `grafana-data`. `GRAFANA_ADMIN_PASSWORD` é
@@ -222,17 +268,47 @@ O Radar **existente — dev** não é emulado: usa o R2 de teste real (restriç�
   e acesso anônimo. O healthcheck consulta `/api/health` a cada 10s, com
   `start_period` de 20s e 12 tentativas; reinicia com `unless-stopped` e usa
   `json-file` rotacionado em 10 MiB/3 arquivos
-  (`compose/docker-compose.dev.yml:89-114`).
+  (`compose/docker-compose.dev.yml:119-145`).
 - **Existente — dev:** `prometheus` usa `prom/prometheus:v3.5.0`, sem porta
-  publicada, com healthcheck em `/-/healthy`, volume `prometheus-data` e
-  retenção local de 7 dias. Ele participa da `metrics-net` com IP
+  publicada, com healthcheck em `/-/ready`, volume `prometheus-data`, WAL
+  comprimido e retenção local de 7 dias. Ele participa da `metrics-net` com IP
   `10.254.20.20` e da `observability`; coleta
   `10.254.20.10:8081/actuator/prometheus` a cada 15s com timeout de 5s.
-  O Grafana provisiona o datasource `Emporio Prometheus` apontando para
-  `http://prometheus:9090`.
+  O Grafana provisiona por arquivo o datasource `Emporio Prometheus`
+  (uid `emporio-prometheus`, `http://prometheus:9090`) e o dashboard
+  `emporio-backend-dev` (provider com `updateIntervalSeconds: 30` e
+  `allowUiUpdates: false`), ambos somente-leitura, de
+  `compose/grafana/`. O dashboard segue o contrato vigente do Backend:
+  HTTP RED curado, latência por **média/máx** (sem `histogram_quantile` —
+  nenhuma série `*_bucket` existe no scrape) e o painel de classes carregadas
+  usa `jvm_classes_loaded_classes`; o teste do Backend é que afirma o prefixo
+  `jvm_classes_loaded_count` no scrape filtrado (`MetricsConfigurationTest.java:621-624`).
+  O smoke valida `/-/healthy` e `/-/ready` do coletor, veta no scrape só a
+  família crua `http_server_requests_seconds` e `disk_*` (o RED curado é
+  legítimo e não casa no veto), prova a presença de `jvm_heap_used_bytes` e
+  valida o RED condicionalmente (só há série após tráfego `/api`).
+  `scripts/metrics-resilience.sh` verifica nome do volume, hash da
+  configuração e amostra histórica de `process_start_time_seconds` no
+  restart, além de `up` 0→1; `scripts/check-grafana-provisioning.sh` prova o
+  autoprovisionamento do dashboard num Grafana descartável de banco vazio.
+  A verificação de cardinalidade da Infra (`scripts/check-metrics-cardinality.py`)
+  valida as chaves de labels da fronteira — allowlist que inclui
+  `route_template` e `method` — e padrões sensíveis de valor (URL, e-mail,
+  UUID); ela não duplica a allowlist finita de valores do Backend nem mede o
+  número de séries.
+  (`compose/docker-compose.dev.yml:53-76,119-145`,
+  `compose/prometheus/prometheus.yml:1-17`,
+  `compose/grafana/provisioning/datasources/prometheus.yaml:4-8`,
+  `compose/grafana/provisioning/dashboards/provider.yaml:1-12`,
+  `compose/grafana/dashboards/emporio-backend.json:21-287`,
+  `scripts/check-metrics-cardinality.py:13-30`,
+  `scripts/smoke.sh:81-92,221-256`,
+  `scripts/metrics-resilience.sh:45-84`,
+  `scripts/check-grafana-provisioning.sh:1-21`,
+  `Backend_Java/src/test/java/br/com/emporio/infrastructure/config/MetricsConfigurationTest.java:621-624`).
 - **Existente — dev:** o Backend escreve ECS no console, separando
   `DEBUG/INFO/WARN` em stdout e `ERROR` em stderr; não há appender de arquivo
-  (`Backend_Java/src/main/resources/application-container.yml:22-31`,
+  (`Backend_Java/src/main/resources/application-container.yml:24-33`,
   `Backend_Java/src/main/resources/logback-spring.xml:7-42`). O contrato ECS é
   verificado diretamente para o Backend; não é uma afirmação de formato dos
   demais serviços sem fonte correspondente.

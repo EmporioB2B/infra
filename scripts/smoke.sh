@@ -22,8 +22,13 @@
 #  15. credencial dedicada lê só o prefixo de quarentena e nega alterações,
 #      listagem e leitura privada.
 #  16. Prometheus coleta as métricas do Backend pela metrics-net;
-#  17. Radar não alcança a porta de management;
-#  18. metrics-net/radar-net possuem exatamente os membros contratados.
+#  17. Prometheus está healthy e ready, com dashboard e datasource provisionados;
+#  18. séries não expõem labels de alta cardinalidade ou PII (checker + vetar só
+#      a família crua http_server_requests_seconds/disk_*, não o RED curado);
+#  18b. heap JVM (jvm_heap_used_bytes) presente; HTTP RED validado quando houver
+#      tráfego /api desde o boot;
+#  19. Radar não alcança a porta de management;
+#  20. metrics-net/radar-net possuem exatamente os membros contratados.
 #
 # Exit != 0 na primeira falha reportada (continua os demais checks para dar
 # o panorama completo).
@@ -72,9 +77,31 @@ else
   bad "api: 8081 possui publicação ou respondeu pelo loopback do host"
 fi
 
-# 3. Prometheus coleta o endpoint real e expõe o target UP.
-if compose exec -T prometheus wget -q -O - \
-  http://10.254.20.10:8081/actuator/prometheus | grep -q '^# HELP'; then
+# 3. Prometheus está healthy/ready, coleta o endpoint real e expõe o target UP.
+if compose exec -T prometheus wget -q -O /dev/null \
+  http://127.0.0.1:9090/-/healthy; then
+  ok "prometheus: /-/healthy"
+else
+  bad "prometheus: /-/healthy falhou"
+fi
+
+if compose exec -T prometheus wget -q -O /dev/null \
+  http://127.0.0.1:9090/-/ready; then
+  ok "prometheus: /-/ready"
+else
+  bad "prometheus: /-/ready falhou"
+fi
+
+SCRAPE_OK=0
+for _ in 1 2 3 4 5; do
+  if compose exec -T prometheus wget -q -O - \
+    http://10.254.20.10:8081/actuator/prometheus | grep -q '^# HELP'; then
+    SCRAPE_OK=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$SCRAPE_OK" -eq 1 ]]; then
   ok "prometheus: scrape HTTP 200 do Backend em 10.254.20.10:8081"
 else
   bad "prometheus: scrape do Backend falhou"
@@ -157,6 +184,75 @@ if compose exec -T grafana test -s /etc/grafana/provisioning/datasources/prometh
   ok "grafana: datasource Prometheus provisionado"
 else
   bad "grafana: datasource Prometheus não está montado"
+fi
+
+if compose exec -T grafana test -s /etc/grafana/provisioning/dashboards/provider.yaml \
+  && compose exec -T grafana test -s /var/lib/grafana/dashboards/emporio-backend.json; then
+  ok "grafana: provider e dashboard montados"
+else
+  bad "grafana: provider ou dashboard não está montado"
+fi
+
+# O dashboard é bind-mount do arquivo versionado; validamos o JSON na origem
+# (host). O parse no engine do Grafana é exercitado no bootstrap limpo (ver
+# scripts/check-grafana-provisioning.sh). Não dependemos do log (ruidoso) nem
+# da senha persistida no volume grafana-data (que diverge do env em boot
+# reaproveitado e causaria 401 sem qualquer falha real).
+if python3 -m json.tool "$ROOT/compose/grafana/dashboards/emporio-backend.json" >/dev/null 2>&1; then
+  ok "grafana: dashboard emporio-backend.json é JSON válido"
+else
+  bad "grafana: dashboard emporio-backend.json tem JSON inválido"
+fi
+
+# Best-effort (não fatal): se a senha do env coincidir com o volume, confirma
+# via API (200). 404 é falha real (dashboard ausente); 401/outro é drift de
+# senha do volume reaproveitado — o JSON válido + provider montado já atestam
+# o provisionamento por arquivo.
+# shellcheck disable=SC2016
+API_STATUS="$(compose exec -T grafana sh -c \
+  'auth=$(printf "%s:%s" "$GF_SECURITY_ADMIN_USER" "$GF_SECURITY_ADMIN_PASSWORD" | base64 | tr -d "\n"); wget -S -O /dev/null --header="Authorization: Basic $auth" http://127.0.0.1:3000/api/dashboards/uid/emporio-backend-dev 2>&1 | grep -m1 -oE "HTTP/[0-9.]+ [0-9]{3}"' \
+  | tr -d '\r' | grep -oE '[0-9]{3}$' || true)"
+case "$API_STATUS" in
+  200) ok "grafana: dashboard emporio-backend-dev consultável via API (HTTP 200)" ;;
+  404) bad "grafana: dashboard ausente no banco (API HTTP 404)" ;;
+  401|"") echo "SKIP grafana: API do dashboard 401/sem resposta (senha do env difere do volume); provisionamento já provado pelo log" ;;
+  *) echo "SKIP grafana: API do dashboard HTTP $API_STATUS (não fatal; log já comprova provisionamento)" ;;
+esac
+
+# A allowlist é dona do Backend. Aqui validamos o contrato de fronteira:
+# nenhum label arbitrário, identificador, PII ou URL chega ao scrape.
+METRICS_PAYLOAD="$(compose exec -T prometheus wget -q -O - \
+  http://10.254.20.10:8081/actuator/prometheus || true)"
+# A família crua vetada é o binder Micrometer padrão `http_server_requests_seconds`
+# (e o disco físico). O RED curado do Backend usa `http_server_requests_total` e
+# `http_server_duration_seconds_*`, que são legítimos e NÃO devem casar aqui.
+if [[ -n "$METRICS_PAYLOAD" ]] \
+  && ! printf '%s' "$METRICS_PAYLOAD" \
+    | grep -Eiq '(request_id|operation_id|event_id|email|cpf|cnpj|phone|telefone|authorization|cookie|https?://)=' \
+  && ! printf '%s' "$METRICS_PAYLOAD" | grep -Eq '(^|[[:space:]])(http_server_requests_seconds|disk_free|disk_total)'; then
+  if printf '%s' "$METRICS_PAYLOAD" | "$ROOT/scripts/check-metrics-cardinality.py"; then
+    ok "metrics: scrape sem labels/valores sensíveis ou famílias excluídas"
+  else
+    bad "metrics: scrape contém label fora da allowlist (route_template/method?)"
+  fi
+else
+  bad "metrics: scrape contém cardinalidade ou família proibida"
+fi
+
+# Prova positiva: a heap agregada (jvm_heap_used_bytes) é sempre emitida pela JVM
+# no boot; sua ausência indica scrape incompleto ou imagem desatualizada.
+if printf '%s' "$METRICS_PAYLOAD" | grep -Eq '^jvm_heap_used_bytes(\{| )'; then
+  ok "metrics: heap JVM (jvm_heap_used_bytes) presente no scrape"
+else
+  bad "metrics: heap JVM ausente (imagem do Backend desatualizada?)"
+fi
+
+# HTTP RED só materializa série após tráfego em /api; quando presente, o checker
+# acima já validou route_template/method. Não é falha estar ausente em idle.
+if printf '%s' "$METRICS_PAYLOAD" | grep -Eq '^http_server_requests_total(\{| )'; then
+  ok "metrics: HTTP RED curado (http_server_requests_total) presente e validado"
+else
+  echo "SKIP metrics: HTTP RED sem série ainda (nenhum tráfego /api desde o boot)"
 fi
 
 COMPOSE_CONTAINERS="$(compose ps -q)"

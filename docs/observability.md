@@ -35,8 +35,12 @@ Acesse:
 http://127.0.0.1:3000
 ```
 
-O datasource `Emporio Loki` é provisionado automaticamente. No Grafana,
-abra **Explore** e consulte, por exemplo:
+Os datasources `Emporio Loki` e `Emporio Prometheus` são provisionados
+automaticamente. O dashboard `Emporio B2B — Backend` também é carregado do
+diretório versionado `compose/grafana/dashboards/`, dentro da pasta `Emporio
+B2B`.
+
+No Grafana, abra **Explore** e consulte, por exemplo:
 
 ```logql
 {environment="dev"}
@@ -49,8 +53,28 @@ o Grafana o consulta pela rede `observability`.
 
 ```promql
 up{job="emporio-backend", environment="dev"}
-rate(radar_http_requests_total[5m])
-rate(storage_failures_total[5m])
+rate(radar_http_requests_total{job="emporio-backend"}[5m])
+rate(storage_failures_total{job="emporio-backend"}[5m])
+
+# Memória: apenas a heap agregada da JVM (sem RSS do container, ver adiante)
+jvm_heap_used_bytes{job="emporio-backend"}
+jvm_heap_used_bytes{job="emporio-backend"} / jvm_heap_max_bytes{job="emporio-backend"}
+
+# Latência: média (rate sum/count) e máx — o contrato NÃO expõe buckets,
+# então histogram_quantile/_bucket não funciona aqui.
+sum by (operation) (rate(radar_http_duration_seconds_sum{job="emporio-backend"}[5m]))
+  / sum by (operation) (rate(radar_http_duration_seconds_count{job="emporio-backend"}[5m]))
+max by (operation) (radar_http_duration_seconds_max{job="emporio-backend"})
+
+# HTTP RED curado da API (labels: route_template, method, status_class, outcome)
+sum by (outcome) (rate(http_server_requests_total{job="emporio-backend"}[5m]))
+sum(rate(http_server_duration_seconds_sum{job="emporio-backend"}[5m]))
+  / sum(rate(http_server_duration_seconds_count{job="emporio-backend"}[5m]))
+
+# Servidor e pools
+tomcat_threads_busy{job="emporio-backend"}
+hikaricp_connections_active{job="emporio-backend"}
+increase(executor_rejections_total{job="emporio-backend"}[5m])
 ```
 
 O contrato local é:
@@ -63,14 +87,59 @@ Prometheus 10.254.20.20
 ```
 
 O Backend não publica `8081`; `MANAGEMENT_SERVER_ADDRESS` é injetado pelo
-Compose como `10.254.20.10`. A métrica HTTP `http.server.requests` permanece
-fora do contrato atual por decisão do Backend; a allowlist de métricas
-operacionais e suas tags continua sendo responsabilidade da aplicação.
+Compose como `10.254.20.10`. O Prometheus usa o volume nomeado
+`prometheus-data`, retenção temporal fixa de 7 dias e WAL comprimido. O
+endpoint `/-/healthy` indica processo vivo e `/-/ready` indica que o coletor
+está pronto para consultas; ambos são validados pelo smoke.
+
+Contrato de métricas do Backend (vigente, verificado no scrape da imagem atual):
+
+- **HTTP:** o binder cru `http.server.requests` (`http_server_requests_seconds`)
+  continua **excluído** pelo `MeterFilter`; o que existe é o **RED curado**
+  próprio do Backend — `http_server_requests_total` e
+  `http_server_duration_seconds_{count,sum,max}` — com labels finitas
+  `route_template, method, status_class, outcome`. As séries só aparecem após
+  tráfego real em `/api`.
+- **Latência:** o contrato **não expõe buckets/percentis** (`*_bucket` não
+  existe). Painéis usam **média** (`rate(sum)/rate(count)`) e **máx**
+  (`*_max`), nunca `histogram_quantile`.
+- **Memória:** a única série é a **heap agregada da JVM**
+  (`jvm_heap_used_bytes`/`jvm_heap_max_bytes`). **Não há `jvm_memory_*` por
+  pool, nem buffer, nem GC pause.** **RSS/memória real do container não é
+  observável no Grafana** — depende de `process_memory_rss_bytes` (lib
+  `micrometer-jvm-extras`) que o Backend ainda não instrumenta. **Isso é
+  pendência registrada para o dev Java**, não uma omissão da Infra.
+
+A allowlist de métricas operacionais e suas tags (domínio, cardinalidade de
+valores) continua responsabilidade da aplicação. A Infra valida a fronteira
+observada contra labels arbitrárias, IDs, PII e URLs
+(`scripts/check-metrics-cardinality.py`) sem duplicar a allowlist do Backend.
 
 As portas `GRAFANA_PORT` e `VECTOR_FLUENTD_PORT` podem ser alteradas no env
 local se houver conflito. Loki não é publicado no host; é acessado por
 Grafana e Vector na rede `observability`. Prometheus também não é publicado;
 use o Grafana ou `docker compose exec prometheus` para consultas locais.
+
+Para validar restart e recuperação do target sem destruir volumes:
+
+```bash
+scripts/metrics-resilience.sh
+```
+
+O script reinicia somente o Prometheus, comprova a preservação de uma amostra
+histórica e da configuração/volume, para temporariamente o Backend, prova
+`up=0`, inicia o Backend novamente e prova o retorno para `up=1`. Ele restaura
+o Backend ao sair, inclusive em caso de falha.
+
+Para provar que o dashboard é auto-provisionado sem depender da senha persistida
+no volume `grafana-data` do dev (que diverge do env em boot reaproveitado e só
+causaria 401 falso-positivo), suba um Grafana descartável de banco limpo com os
+mesmos arquivos versionados montados. Este teste **não** toca o `grafana-data`
+do stack nem cria volume nomeado; usa bind temporário em `/tmp/opencode`:
+
+```bash
+scripts/check-grafana-provisioning.sh
+```
 
 ## Produção: Grafana Cloud Loki via Dokploy
 

@@ -45,6 +45,22 @@ prova de healthy; assumir cobertura/latência/isolamento não medidos.
 - **smoke**: `scripts/smoke.sh` exit 0 com saída registrada (health api
   8081, `/health/ready` do radar pela rede interna, front respondendo,
   buckets RustFS presentes);
+- **métricas/observabilidade local** (change set que toca métricas, Prometheus,
+  Grafana ou dashboard):
+  - `docker run --rm --entrypoint promtool -v .../prometheus.yml:/tmp/p.yml:ro prom/prometheus:<tag> check config /tmp/p.yml` exit 0;
+  - `shellcheck scripts/*.sh` via imagem `koalaman/shellcheck` exit 0;
+  - `scripts/metrics-resilience.sh` exit 0 (restart preserva volume/config/amostra
+    histórica; `up` 0→1 sem tocar volumes nem `down -v`);
+  - `scripts/check-grafana-provisioning.sh` exit 0 (dashboard auto-provisiona num
+    Grafana de banco limpo — a prova **não** pode depender da senha persistida no
+    volume `grafana-data` do dev, que diverge do env em boot reaproveitado e só
+    gera 401 falso-positivo);
+  - scrape real confirma as séries que o dashboard consulta (sem `*_bucket`, já
+    que o contrato não expõe percentis; HTTP RED só aparece com tráfego em `/api`,
+    então exercite um endpoint antes de afirmar presença do RED);
+  - `scripts/check-metrics-cardinality.py` aceita o scrape vigente (inclusive as
+    labels novas do RED, ex. `route_template`/`method`) e veta só família crua /
+    valores sensíveis;
 - **percurso manual E2E (quando for o escopo)**: jornada registrada com o
   que foi observado em cada passo (cadastro → email no Mailpit → documentos
   no RustFS → aprovação → login; fotos servidas pelo bucket público local);
