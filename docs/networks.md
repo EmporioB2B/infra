@@ -23,6 +23,9 @@ emuladores no lugar dos serviços externos e sem cloudflared.
 
     metrics-net (bridge, internal: true)
       backend:10.254.20.10:8081 ── prometheus:10.254.20.20
+
+    radar-metrics-net (bridge, internal: true)
+      radar:10.254.21.30:8082/metrics ── prometheus:10.254.21.20
 ```
 
 ## Regras
@@ -34,9 +37,13 @@ emuladores no lugar dos serviços externos e sem cloudflared.
 | `egress` | bridge | radar | saída controlada para o R2 de teste real e ViaCEP |
 | `observability` | bridge | vector, loki, grafana, prometheus | pipeline local de logs e consulta de métricas; sem acesso a `radar-net`; Vector recebe somente pela porta de loopback publicada pelo host |
 | `metrics-net` | bridge **`internal: true`** | backend, prometheus | único caminho do scraper para `backend:8081`; subnet `10.254.20.0/24`, gateway `10.254.20.1`; sem portas publicadas |
+| `radar-metrics-net` | bridge **`internal: true`** | radar, prometheus | único caminho do scraper para `radar:8082/metrics`; subnet `10.254.21.0/24`, gateway `10.254.21.1`; sem portas publicadas |
 
-- **Radar nunca publica porta** (`ports:` ausente em qualquer compose, dev
-  ou prod) e só é alcançado por containers na `radar-net`. Enquanto o Radar
+- **Radar nunca publica porta no Compose integrado da Infra** (`ports:` ausente
+  no dev/prod canônico). O Compose standalone do repo Radar pode publicar 8000
+  para desenvolvimento isolado, mas não é fonte da topologia integrada. A API 8000 só é alcançada por containers na `radar-net`; o endpoint
+  privado de métricas 8082 é alcançado exclusivamente pelo Prometheus na
+  `radar-metrics-net`. Enquanto o Radar
   não tem autenticação serviço-a-serviço (mTLS é task futura nos repos
   irmãos), esse isolamento é a mitigação estrutural.
 - Um serviço em rede `internal` + `egress` alcança a internet **somente**
@@ -147,4 +154,13 @@ docker compose --env-file env/.env.dev -f compose/docker-compose.dev.yml \
 # metrics-net interna e com os dois membros esperados
 docker network inspect emporio-dev_metrics-net \
   --format '{{.Internal}} {{range .Containers}}{{.Name}} {{end}}'       # true + backend + prometheus
+
+# Radar metrics: scrape interno, sem publicação no host
+docker compose --env-file env/.env.dev -f compose/docker-compose.dev.yml \
+  exec prometheus wget -q -O - http://10.254.21.30:8082/metrics \
+  | grep '^# HELP radar_health_ready'                                    # deve PASSAR
+docker network inspect emporio-dev_radar-metrics-net \
+  --format '{{.Internal}} {{range .Containers}}{{.Name}} {{end}}'       # true + radar + prometheus
+docker compose --env-file env/.env.dev -f compose/docker-compose.dev.yml \
+  port radar 8082                                                       # vazio
 ```

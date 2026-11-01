@@ -275,6 +275,64 @@
       ],
       "title": "Conexões Tomcat",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 67},
+      "id": 67,
+      "panels": [],
+      "title": "Radar — saúde, processo e geografia CEP",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "max": 1}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 0, "y": 68},
+      "id": 68,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "targets": [{"expr": "radar_health_ready{job=\"emporio-radar\"}", "legendFormat": "ready", "refId": "A"}],
+      "title": "Radar readiness",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 6, "y": 68},
+      "id": 69,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "targets": [{"expr": "process_resident_memory_bytes{job=\"emporio-radar\"}", "legendFormat": "RSS", "refId": "A"}],
+      "title": "Radar memória do processo",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 12, "y": 68},
+      "id": 70,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "targets": [{"expr": "rate(process_cpu_seconds_total{job=\"emporio-radar\"}[5m])", "legendFormat": "process CPU", "refId": "A"}],
+      "title": "Radar CPU do processo",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 18, "y": 68},
+      "id": 71,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "targets": [{"expr": "sum by (uf) (rate(radar_cep_queries_total{job=\"emporio-radar\",outcome=\"hit\"}[1h]))", "legendFormat": "{{uf}}", "refId": "A"}],
+      "title": "Consultas CEP por UF",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "emporio-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 75},
+      "id": 72,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "targets": [{"expr": "topk(20, sum by (uf, codigo_cidade) (increase(radar_cep_primary_city_queries_total{job=\"emporio-radar\"}[$__range])))", "legendFormat": "{{uf}} / {{codigo_cidade}}", "refId": "A"}],
+      "title": "Top cidades primárias por código (sem catálogo de nomes/coordenadas)",
+      "type": "timeseries"
     }
   ],
   "refresh": "15s",
@@ -286,6 +344,6 @@
   "timezone": "browser",
   "title": "Emporio B2B — Backend",
   "uid": "emporio-backend-dev",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }

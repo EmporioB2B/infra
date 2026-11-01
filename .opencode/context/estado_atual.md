@@ -25,6 +25,11 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `${VAR:?}` do compose; placeholders apenas), `scripts/up-dev.sh`,
   `scripts/init-rustfs.sh`, `scripts/smoke.sh`, `scripts/gen-dev-certs.sh` e
   `docs/networks.md`/`docs/observability.md`.
+- **Existente — dev:** o example cobre os nomes das variáveis obrigatórias com
+  placeholders completos `replace-with-*`; o operador ainda precisa substituir
+  cada valor antes da subida, pois o `rustfs-init` rejeita placeholders como
+  credenciais reais (`env/.env.dev.example:23-43,53`,
+  `scripts/init-rustfs.sh:8-24`).
 - **Existente — dev:** os logs dos serviços de aplicação seguem stdout/stderr
   pelo driver Docker `fluentd` assíncrono para `vector`; Loki e Grafana não
   montam Docker socket, a UI do Grafana fica em loopback e os dados usam
@@ -32,8 +37,8 @@ Fotografia factual vigente. Não é cronologia de tasks.
   socket; seu healthcheck consulta a API local de liveness, enquanto a
   validação de configuração e o smoke verificam a chegada de um log do Backend
   ao Loki. O bootstrap aguarda os healthchecks declarados
-  (`scripts/up-dev.sh:82-103`; `compose/docker-compose.dev.yml:53-485`)
-  e o smoke contém a prova de ingestão (`scripts/smoke.sh:300-308`).
+  (`scripts/up-dev.sh:82-103`; `compose/docker-compose.dev.yml:53-546`)
+  e o smoke contém a prova de ingestão (`scripts/smoke.sh:362-367`).
 - **Existente — dev:** o Backend e o Prometheus participam da `metrics-net`
   (`internal: true`, subnet `10.254.20.0/24`); o Backend usa
   `10.254.20.10:8081` para management e o Prometheus usa `10.254.20.20`.
@@ -62,11 +67,34 @@ Fotografia factual vigente. Não é cronologia de tasks.
   teste do Backend é que afirma o prefixo `jvm_classes_loaded_count` no scrape
   (`MetricsConfigurationTest.java:621-624`). O checker de cardinalidade da
   Infra (`scripts/check-metrics-cardinality.py`) mantém allowlist de chaves de
-  label da fronteira — incluindo `route_template` e `method` — sem duplicar os
-  valores de domínio do Backend. O host Docker também pode alcançar
+  label da fronteira — incluindo `route_template`, `method`, `uf` e
+  `codigo_cidade` — sem duplicar os valores de domínio do Backend; o mesmo
+  checker é aplicado ao scrape do Radar pelo smoke. O host Docker também pode alcançar
   diretamente `10.254.20.10:8081`; `internal: true` e ausência de `ports:` não
-  constituem firewall contra o host (`scripts/smoke.sh:62-78,80-115,221-256`;
-  `compose/docker-compose.dev.yml:504-513`).
+  constituem firewall contra o host (`scripts/smoke.sh:62-80,143-151`;
+  `compose/docker-compose.dev.yml:495-522`).
+- **Existente — dev:** o mesmo Prometheus coleta o Radar pela
+  `radar-metrics-net` em `10.254.21.30:8082/metrics`, sem publicação de 8082.
+  A rede é separada da `metrics-net` para manter o isolamento Radar→Backend:8081;
+  o smoke verifica target, readiness, labels e os membros das três redes
+  (`compose/docker-compose.dev.yml:288-325,495-532`,
+  `compose/prometheus/prometheus.yml:18-25`, `scripts/smoke.sh:117-220,289-299`).
+- **Existente — Radar promovido:** o código usa `METRICS_BIND_ADDRESS` e
+  `METRICS_PORT`, listener WSGI bounded em 8082 e registro isolado com
+  `radar_health_ready`, `process_*`, HTTP RED, consultas CEP e cidade primária
+  por `uf,codigo_cidade`. O mapa empacotado de municípios contém nomes/códigos,
+  mas não coordenadas; Geomap permanece **planejado**. Traceback residual em
+  stderr é aceito pelo dono do Radar e não altera o endpoint privado
+  (`Radar_Middleware_Python/src/radar_middleware/infrastructure/config.py:201-207`,
+  `Radar_Middleware_Python/src/radar_middleware/infrastructure/observability/prometheus.py:72-165,240-248`,
+  `Radar_Middleware_Python/src/radar_middleware/infrastructure/cep/data/municipios_rfb.csv:1`).
+- **Existente — dev:** os volumes efetivos de banco e estado do Radar são
+  `emporio-dev_pgdata_v2` e `emporio-dev_radar_state_v2`. Os volumes antigos
+  permanecem preservados para rollback/investigação manual: o estado antigo do
+  Radar não tinha `cep_cidades`, e o pgdata antigo carregava checksums Flyway
+  incompatíveis (6/8). Essa recuperação é somente local de dev; a produção
+  continua sem PostgreSQL em container e o SQLite do Radar é reconstruível
+  (`compose/docker-compose.dev.yml:534-542`).
 - **Planejado — dev profile:** o perfil `prodlike` (`front-prod`) NÃO foi
   criado — bloqueado pela TASK-INFRA-002; o serviço está documentado no YAML e no
   doc.
@@ -88,8 +116,15 @@ Fotografia factual vigente. Não é cronologia de tasks.
   administrativas de plataforma. A senha do fixture vem de
   `ADMIN_DEV_PASSWORD` no ambiente local ignorado e não é impressa. O fixture
   continua somente de dev e não cria `perfil_usuario` (fonte do artefato:
-  `scripts/seed-admin-dev.sh:84-229`;
+  `scripts/seed-admin-dev.sh:84-249`;
   schema/contratos: `Backend_Java/src/main/resources/db/migration/V2__autenticacao_autorizacao.sql:109-145,376-424`).
+- **Limitação existente — dev:** `scripts/seed-admin-dev.sh` só pode rodar
+  depois que o Postgres novo estiver saudável e o Flyway do Backend tiver
+  aplicado o schema vigente; ele cria o usuário, vínculo, papel e nove
+  capacidades, mas não cria `perfil_usuario`. É um seed local do Back, não uma
+  preparação de produção (`scripts/seed-admin-dev.sh:46-49,84-161,204-249`,
+  `Backend_Java/src/main/resources/application.yml:37-39`,
+  `Backend_Java/src/main/resources/db/migration/V2__autenticacao_autorizacao.sql:16-60`).
 - **Existente — dev:** `scripts/up-dev.sh` inicia RustFS antes do restante do stack, confirma seu
   attachment à rede default do projeto e recria somente o container RustFS
   se a rede estiver ausente, preservando `rustfs-data`. O job

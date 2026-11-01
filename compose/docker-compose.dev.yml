@@ -43,6 +43,7 @@ x-local-logging: &local-logging
     max-file: "3"
 
 x-backend-metrics-address: &backend-metrics-address 10.254.20.10
+x-radar-metrics-address: &radar-metrics-address 10.254.21.30
 
 services:
   # ---------------------------------------------------------------------------
@@ -69,6 +70,8 @@ services:
     networks:
       metrics-net:
         ipv4_address: 10.254.20.20
+      radar-metrics-net:
+        ipv4_address: 10.254.21.20
       observability:
     restart: unless-stopped
     security_opt:
@@ -300,6 +303,10 @@ services:
       ENVIRONMENT: development
       LOG_LEVEL: ${RADAR_LOG_LEVEL:-INFO}
       SQLITE_PATH: /var/lib/radar-middleware/state/radar.sqlite3
+      # O listener Prometheus não é publicado; a Infra restringe o bind à
+      # interface da radar-metrics-net, separada da radar-net e da egress.
+      METRICS_BIND_ADDRESS: *radar-metrics-address
+      METRICS_PORT: "8082"
     volumes:
       - radar_state:/var/lib/radar-middleware/state
     healthcheck:
@@ -310,8 +317,10 @@ services:
       start_period: 90s
       retries: 3
     networks:
-      - radar-net
-      - egress
+      radar-net:
+      egress:
+      radar-metrics-net:
+        ipv4_address: *radar-metrics-address
     restart: unless-stopped
     logging: *dev-logging
 
@@ -511,11 +520,26 @@ networks:
       config:
         - subnet: 10.254.20.0/24
           gateway: 10.254.20.1
+  radar-metrics-net:
+    # Prometheus <-> Radar somente; não incluir o Backend para preservar o
+    # isolamento negativo Radar -> Backend:8081 da metrics-net existente.
+    name: emporio-dev_radar-metrics-net
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.254.21.0/24
+          gateway: 10.254.21.1
 
 volumes:
+  # O schema atual do Back/Radar não é compatível com volumes dev antigos
+  # desta máquina. Os nomes v2 preservam os volumes anteriores sem down -v,
+  # dropdb ou remoção; ambos os estados são reconstruíveis no dev.
   pgdata:
+    name: emporio-dev_pgdata_v2
   rustfs-data:
   radar_state:
+    name: emporio-dev_radar_state_v2
   prometheus-data:
   loki-data:
   vector-data:

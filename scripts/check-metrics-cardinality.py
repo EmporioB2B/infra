@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Valida a fronteira de labels do scrape Prometheus do Backend.
+"""Valida a fronteira de labels dos scrapes Prometheus da Infra.
 
 Não duplica a allowlist finita de valores do Backend: verifica apenas que toda
 label observada pertence ao vocabulário conhecido e que nenhum valor carrega
@@ -11,9 +11,11 @@ import re
 import sys
 
 ALLOWED_LABELS = {
+    "codigo_cidade",
     "dependency",
     "error_code",
     "failure_class",
+    "le",
     "level",
     "method",
     "name",
@@ -27,6 +29,7 @@ ALLOWED_LABELS = {
     "stage",
     "state",
     "status_class",
+    "uf",
 }
 FORBIDDEN_VALUE = re.compile(
     r"(?:https?://|\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b|"

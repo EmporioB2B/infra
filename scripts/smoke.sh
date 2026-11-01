@@ -30,8 +30,8 @@
 #  19. Radar não alcança a porta de management;
 #  20. metrics-net/radar-net possuem exatamente os membros contratados.
 #
-# Exit != 0 na primeira falha reportada (continua os demais checks para dar
-# o panorama completo).
+# Exit != 0 se algum check falhar; o smoke continua os demais checks para dar
+# o panorama completo.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -41,7 +41,9 @@ RC_IMAGE="rustfs/rc:v0.1.30"
 NET="emporio-dev_default"
 METRICS_NET="emporio-dev_metrics-net"
 RADAR_NET="emporio-dev_radar-net"
+RADAR_METRICS_NET="emporio-dev_radar-metrics-net"
 MANAGEMENT_ADDRESS="10.254.20.10"
+RADAR_METRICS_ADDRESS="10.254.21.30"
 
 [[ -f "$ENV_FILE" ]] || { echo "ERRO: falta $ENV_FILE (scripts/up-dev.sh)" >&2; exit 1; }
 
@@ -115,6 +117,29 @@ else
   bad "prometheus: target emporio-backend não está UP"
 fi
 
+if compose exec -T prometheus wget -q -O - \
+  "http://${RADAR_METRICS_ADDRESS}:8082/metrics" \
+  | grep -q '^# HELP radar_health_ready'; then
+  ok "prometheus: scrape HTTP 200 do Radar em ${RADAR_METRICS_ADDRESS}:8082/metrics"
+else
+  bad "prometheus: scrape do Radar falhou"
+fi
+
+if compose exec -T prometheus wget -q -O - \
+  'http://127.0.0.1:9090/api/v1/query?query=up%7Bjob%3D%22emporio-radar%22%7D' \
+  | grep -q '"value".*"1"'; then
+  ok "prometheus: target emporio-radar está UP"
+else
+  bad "prometheus: target emporio-radar não está UP"
+fi
+
+if [[ -z "$(compose port radar 8082 2>/dev/null || true)" ]] \
+  && ! curl -fsS --max-time 3 http://127.0.0.1:8082/metrics >/dev/null 2>&1; then
+  ok "radar: 8082 não publicada no host"
+else
+  bad "radar: 8082 possui publicação ou respondeu pelo loopback do host"
+fi
+
 # O Radar possui somente radar-net/egress e deve falhar ao alcançar o bind de
 # management, que existe exclusivamente na metrics-net.
 if compose exec -T radar python -c \
@@ -149,6 +174,28 @@ if [[ "${#metrics_members[@]}" -eq 2 && "$metrics_has_backend" -eq 1 \
   ok "metrics-net: internal e contém somente backend/prometheus"
 else
   bad "metrics-net: topologia inesperada (${metrics_members[*]:-vazia})"
+fi
+
+radar_metrics_members=()
+while IFS= read -r member; do
+  [[ -n "$member" ]] && radar_metrics_members+=("$member")
+done < <(network_members "$RADAR_METRICS_NET")
+
+radar_metrics_has_radar=0
+radar_metrics_has_prometheus=0
+for member in "${radar_metrics_members[@]}"; do
+  case "$member" in
+    *radar*) radar_metrics_has_radar=1 ;;
+    *prometheus*) radar_metrics_has_prometheus=1 ;;
+  esac
+done
+if [[ "${#radar_metrics_members[@]}" -eq 2 \
+  && "$radar_metrics_has_radar" -eq 1 \
+  && "$radar_metrics_has_prometheus" -eq 1 \
+  && "$(docker network inspect "$RADAR_METRICS_NET" --format '{{.Internal}}' 2>/dev/null || true)" == "true" ]]; then
+  ok "radar-metrics-net: internal e contém somente radar/prometheus"
+else
+  bad "radar-metrics-net: topologia inesperada (${radar_metrics_members[*]:-vazia})"
 fi
 
 radar_members=()
@@ -228,7 +275,7 @@ METRICS_PAYLOAD="$(compose exec -T prometheus wget -q -O - \
 # `http_server_duration_seconds_*`, que são legítimos e NÃO devem casar aqui.
 if [[ -n "$METRICS_PAYLOAD" ]] \
   && ! printf '%s' "$METRICS_PAYLOAD" \
-    | grep -Eiq '(request_id|operation_id|event_id|email|cpf|cnpj|phone|telefone|authorization|cookie|https?://)=' \
+    | grep -Eiq '(request_id|operation_id|event_id|email|cpf|cnpj|cep|phone|telefone|authorization|cookie|https?://)=' \
   && ! printf '%s' "$METRICS_PAYLOAD" | grep -Eq '(^|[[:space:]])(http_server_requests_seconds|disk_free|disk_total)'; then
   if printf '%s' "$METRICS_PAYLOAD" | "$ROOT/scripts/check-metrics-cardinality.py"; then
     ok "metrics: scrape sem labels/valores sensíveis ou famílias excluídas"
@@ -237,6 +284,18 @@ if [[ -n "$METRICS_PAYLOAD" ]] \
   fi
 else
   bad "metrics: scrape contém cardinalidade ou família proibida"
+fi
+
+RADAR_METRICS_PAYLOAD="$(compose exec -T prometheus wget -q -O - \
+  "http://${RADAR_METRICS_ADDRESS}:8082/metrics" || true)"
+if [[ -n "$RADAR_METRICS_PAYLOAD" ]] \
+  && printf '%s' "$RADAR_METRICS_PAYLOAD" | grep -q '^radar_health_ready' \
+  && ! printf '%s' "$RADAR_METRICS_PAYLOAD" \
+    | grep -Eiq '(request_id|operation_id|event_id|email|cpf|cnpj|cep|phone|telefone|authorization|cookie|https?://)=' \
+  && printf '%s' "$RADAR_METRICS_PAYLOAD" | "$ROOT/scripts/check-metrics-cardinality.py"; then
+  ok "metrics: scrape Radar sem CEP/CNPJ/PII e labels dentro da allowlist"
+else
+  bad "metrics: scrape Radar ausente ou contém label/valor proibido"
 fi
 
 # Prova positiva: a heap agregada (jvm_heap_used_bytes) é sempre emitida pela JVM

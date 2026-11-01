@@ -63,7 +63,8 @@ para R2/ViaCEP.
 ## Desenvolvimento/integração (máquina local)
 
 **Existente — dev:** mesma topologia principal de redes da produção planejada,
-com a rede adicional `metrics-net` exclusiva do dev para o scrape do Backend,
+com as redes adicionais `metrics-net` (scrape do Backend) e
+`radar-metrics-net` (scrape do Radar),
 emuladores no lugar dos serviços externos e sem cloudflared. Implementado em
 `compose/docker-compose.dev.yml`, com healthchecks, `scripts/smoke.sh`,
 isolamento da `radar-net`, `media-gateway` local para fotos públicas e
@@ -76,7 +77,7 @@ services:
   backend    build ../Backend_Java (dev,container)    127.0.0.1:8080
              management 10.254.20.10:8081 somente na metrics-net
   radar      build ../Radar_Middleware_Python         SEM portas;
-             env_file local do Radar (R2 de teste)
+             env_file local do Radar (R2 de teste); metrics 10.254.21.30:8082
   rustfs     emula R2 do Back (quarentena/privado/    127.0.0.1:9000/9001
               público de fotos) + rustfs-init
   media-gateway  nginx para fotos públicas              127.0.0.1:9002 → :80
@@ -84,7 +85,8 @@ services:
   mailpit    SMTP com STARTTLS+auth; UI               127.0.0.1:8025
   loki       armazenamento local de logs              somente rede observability
   vector     coleta Fluent → Loki                     127.0.0.1:${VECTOR_FLUENTD_PORT:-24224} (driver)
-  prometheus scrape do Backend pela metrics-net    também na observability
+  prometheus scrape do Backend pela metrics-net    e Radar pela radar-metrics-net;
+             também na observability
   grafana    UI/query Loki + Prometheus               127.0.0.1:${GRAFANA_PORT:-3000}
   front-dev  Dockerfile-dev (ng serve + proxy)        127.0.0.1:4200
   front-prod profile "prodlike": imagem SSR de        127.0.0.1:4000
@@ -98,6 +100,7 @@ networks:
   egress     radar → R2 de teste / ViaCEP
   observability  vector ↔ loki ↔ prometheus ↔ grafana; sem acesso a radar-net
   metrics-net    internal: backend:10.254.20.10 ↔ prometheus:10.254.20.20
+  radar-metrics-net internal: radar:10.254.21.30 ↔ prometheus:10.254.21.20
 
 volumes:
   pgdata, rustfs-data, radar_state, prometheus-data (named); bind-mount somente-leitura
@@ -105,12 +108,19 @@ volumes:
   ignorado pelo git); loki-data, vector-data e grafana-data (named)
 ```
 
+- **Existente — dev:** os volumes nomeados efetivos do banco e do estado do
+  Radar são `emporio-dev_pgdata_v2` e `emporio-dev_radar_state_v2`. Eles
+  preservam os volumes dev antigos sem remoção destrutiva, pois o estado antigo
+  do Radar não tinha `cep_cidades` e o pgdata antigo carregava checksums Flyway
+  incompatíveis (6/8). Essa recuperação é local de dev; não cria nem presume
+  volumes equivalentes em produção.
+
 - **Existente — dev:** o Backend mantém ECS JSON em stdout/stderr e os serviços
   de aplicação e emuladores de longa duração usam o driver Docker `fluentd`
   assíncrono para o Vector local
   (`Backend_Java/src/main/resources/application-container.yml:24-33`,
   `Backend_Java/src/main/resources/logback-spring.xml:7-42`,
-  `compose/docker-compose.dev.yml:25-35,151-172,174-282,292-316,325-355,385-410,417-439,447-468`). Loki,
+  `compose/docker-compose.dev.yml:25-35,151-172,177-285,295-325,334-364,385-410,417-439,447-477`). Loki,
   Vector, Prometheus e Grafana usam `json-file` rotacionado para não formar um
   ciclo de coleta.
   Nenhum serviço monta `/var/run/docker.sock`.
@@ -143,12 +153,17 @@ volumes:
   família crua e prova a heap; a cardinalidade da fronteira é validada por
   allowlist de chaves de label (inclui `route_template`/`method`) sem
   duplicar os valores de domínio do Backend.
-  (`compose/docker-compose.dev.yml:53-76,119-145`,
-  `compose/prometheus/prometheus.yml:1-17`,
+  O job `emporio-radar` raspa `10.254.21.30:8082/metrics` pela
+  `radar-metrics-net` (`10.254.21.20` no Prometheus), separada da
+  `metrics-net` do Backend para preservar o negativo Radar→Backend:8081. O
+  Radar expõe readiness, processo, HTTP RED, consultas CEP por UF e cidade
+  primária por código; o catálogo de coordenadas para Geomap continua pendente.
+  (`compose/docker-compose.dev.yml:53-76,119-145,288-325,495-542`,
+  `compose/prometheus/prometheus.yml:1-25`,
   `compose/grafana/provisioning/dashboards/provider.yaml:1-12`,
-  `compose/grafana/dashboards/emporio-backend.json:21-287`,
-  `scripts/smoke.sh:80-115,221-256`, `scripts/metrics-resilience.sh:45-84`,
-  `scripts/check-metrics-cardinality.py:13-30`,
+  `compose/grafana/dashboards/emporio-backend.json:21-335`,
+  `scripts/smoke.sh:82-141,153-220,222-299`, `scripts/metrics-resilience.sh:45-84`,
+  `scripts/check-metrics-cardinality.py:13-33`,
   `scripts/check-grafana-provisioning.sh:1-21`,
   `Backend_Java/src/main/java/br/com/emporio/infrastructure/config/MetricsConfiguration.java:114-127,284-298`,
   `Backend_Java/src/main/java/br/com/emporio/infrastructure/observability/HttpMetricsFilter.java:33-34,81-89`).
@@ -156,8 +171,8 @@ volumes:
   mas isso não é firewall contra o próprio host Docker: o host pode alcançar
   diretamente `10.254.20.10:8081`. A arquitetura não promete bloquear esse
   acesso; a contenção verificada é entre containers e por ausência de publish
-  (`compose/docker-compose.dev.yml:276-281,504-513`,
-  `scripts/smoke.sh:62-78,139-150`).
+  (`compose/docker-compose.dev.yml:276-281,495-522`,
+  `scripts/smoke.sh:63-80,143-151`).
 - **Planejado — produção:** o Dokploy configura `Settings → Logs & Metrics`
   com provider Grafana Loki; o `dokploy-vector` envia os logs dos containers
   para o endpoint HTTPS. O Dokploy não instala Loki/Grafana Cloud e nenhum

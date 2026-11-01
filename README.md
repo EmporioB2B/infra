@@ -122,8 +122,11 @@ procedimento de produção via Grafana Cloud/Dokploy. O dashboard
 `Emporio B2B — Backend` é provisionado automaticamente na pasta `Emporio B2B` e
 cobre disponibilidade, CPU/sistema, **heap da JVM**, Hikari, executores, HTTP
 RED curado da API, servidor Tomcat e as operações de Radar/storage/email/
-notificação/catálogo. **A memória real do container (RSS) ainda não é
-observável** — depende de instrumentação pendente no Backend (ver doc).
+notificação/catálogo. O mesmo dashboard também apresenta readiness, RSS/CPU do
+processo Radar e consultas CEP por UF/código municipal (sem Geomap enquanto o
+catálogo de coordenadas não existir). **A memória real do container do Backend
+(RSS) ainda não é observável** — depende de instrumentação pendente no Backend
+(ver doc).
 
 Para testar restart do coletor e recuperação de um target sem remover volumes:
 

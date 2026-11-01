@@ -21,7 +21,7 @@ estão aposentados.
   host Docker de alcançar diretamente o IP da bridge; não há garantia de
   firewall nesse caminho (`Backend_Java/Dockerfile:23-38`,
   `Backend_Java/src/main/resources/application-container.yml:35-42`,
-  `compose/docker-compose.dev.yml:174-183,270-280,504-513`).
+  `compose/docker-compose.dev.yml:177-190,262-285,513-522`).
 - Profiles: `dev`, `test`, `container`, `prod`. Combinações vigentes:
   dev em compose `dev,container`; produção `prod,container`.
 - **Contrato de métricas do Backend (existente, verificado no código-fonte do
@@ -170,10 +170,28 @@ estão aposentados.
 - Imagem: `python:3.12.14-slim-bookworm`, usuário `radar` (10001),
   `ENTRYPOINT radar-middleware`; diretórios da imagem:
   `/var/lib/radar-middleware/{logs,state}` (dono `radar:radar`).
-- Porta interna: **8000** (`PORT`). **Nunca publicar no host**; sem
-  `ports:` em nenhum compose.
+- Porta interna: **8000** (`PORT`). No Compose integrado da Infra, **nunca
+  publicar no host**; o Compose standalone local do próprio Radar ainda
+  publica 8000 para desenvolvimento isolado e não é usado pelo stack integrado
+  (`Radar_Middleware_Python/docker-compose.yml:9-20`).
+- **Existente — dev, contrato promovido:** listener Prometheus separado em
+  `METRICS_BIND_ADDRESS:METRICS_PORT`; a Infra configura
+  `10.254.21.30:8082`, endpoint `/metrics`, sem publicação no host. O scrape
+  ocorre na rede interna exclusiva `radar-metrics-net` (`prometheus` em
+  `10.254.21.20` ↔ `radar` em `10.254.21.30`), não na `metrics-net` do Backend,
+  para preservar o negativo Radar→Backend:8081. O listener usa WSGI bounded,
+  registro Prometheus isolado e as famílias `radar_health_ready`, o process
+  collector (`process_*`), `radar_http_requests_total`,
+  `radar_http_duration_seconds`, `radar_cep_queries_total`,
+  `radar_cep_lookup_duration_seconds` e
+  `radar_cep_primary_city_queries_total{uf,codigo_cidade}`. As labels de CEP
+  usam `uf/outcome`; a cidade primária só materializa quando o código é
+  resolvido pelo mapa de referência (fontes no irmão:
+  `src/radar_middleware/infrastructure/observability/prometheus.py:77-80,124-165,240-248`,
+  `src/radar_middleware/infrastructure/config.py:201-207`).
 - Envs reais (Pydantic settings, `env_prefix=""`, case-sensitive):
   `ENVIRONMENT`, `LOG_LEVEL`, `PORT`,
+  `METRICS_BIND_ADDRESS`, `METRICS_PORT`,
   `CLOUDFLARE_KEY_ID`, `CLOUDFLARE_SECRET_KEY`, `CLOUDFLARE_URL_ACCESS`,
   `CLOUDFLARE_BUCKET_NAME`, `CLOUDFLARE_REGION`,
   `CLOUDFLARE_CEP_OBJECT_KEY`, `CLOUDFLARE_CEP_MANIFEST_OBJECT_KEY`,
@@ -200,6 +218,17 @@ estão aposentados.
   interna exclusiva. Verificação canônica:
   `uv run pytest tests/unit tests/contract tests/integration -q`,
   `uv run ruff check .`, `uv run ruff format --check .`.
+- **Pendência de visualização:** o Radar ainda não entrega catálogo de
+  coordenadas para `codigo_cidade`. Existe um mapa de referência de municípios
+  com códigos e nomes RFB/IBGE, mas ele não contém latitude/longitude; o Grafana
+  pode exibir UF/código/ranking, mas o Geomap continua **planejado** e depende
+  do catálogo de coordenadas posterior
+  (`src/radar_middleware/infrastructure/cep/municipios.py:44-54`). O listener
+  WSGI é bounded (timeout de conexão e no máximo quatro conexões), e o risco
+  residual aceito pelo dono do Radar de traceback em stderr permanece contido
+  pela rede privada e ausência de publish/roteamento externo
+  (`Radar_Middleware_Python/src/radar_middleware/infrastructure/observability/prometheus.py:72-120`,
+  `Radar_Middleware_Python/src/radar_middleware/infrastructure/observability/logging_setup.py:150-205`).
 
 ## Front_Angular (serviço `front`)
 
@@ -297,15 +326,25 @@ O Radar **existente — dev** não é emulado: usa o R2 de teste real (restriç�
   UUID); ela não duplica a allowlist finita de valores do Backend nem mede o
   número de séries.
   (`compose/docker-compose.dev.yml:53-76,119-145`,
-  `compose/prometheus/prometheus.yml:1-17`,
+  `compose/prometheus/prometheus.yml:1-25`,
   `compose/grafana/provisioning/datasources/prometheus.yaml:4-8`,
   `compose/grafana/provisioning/dashboards/provider.yaml:1-12`,
-  `compose/grafana/dashboards/emporio-backend.json:21-287`,
-  `scripts/check-metrics-cardinality.py:13-30`,
-  `scripts/smoke.sh:81-92,221-256`,
+  `compose/grafana/dashboards/emporio-backend.json:21-335`,
+  `scripts/check-metrics-cardinality.py:13-33`,
+  `scripts/smoke.sh:82-141,222-299`,
   `scripts/metrics-resilience.sh:45-84`,
   `scripts/check-grafana-provisioning.sh:1-21`,
   `Backend_Java/src/test/java/br/com/emporio/infrastructure/config/MetricsConfigurationTest.java:621-624`).
+ - **Existente — dev:** o mesmo Prometheus coleta o Radar em job separado
+   `emporio-radar`, pela rede interna `radar-metrics-net` (`10.254.21.20` no
+   Prometheus → `10.254.21.30:8082/metrics` no Radar), sem compartilhar a
+   `metrics-net` do Backend. O scrape expõe `radar_health_ready`, métricas de
+   processo, HTTP RED, CEP por `uf/outcome` e cidade primária por
+   `uf/codigo_cidade`; o mapa de nomes/códigos existe no Radar, mas o catálogo
+   de coordenadas para Geomap ainda não existe. O smoke valida target, readiness, ausência de publish 8082,
+   membros `radar/prometheus` e labels sem CEP/CNPJ/PII
+   (`compose/prometheus/prometheus.yml:9-25`,
+   `compose/docker-compose.dev.yml:288-325,495-532`, `scripts/smoke.sh:117-220,289-299`).
 - **Existente — dev:** o Backend escreve ECS no console, separando
   `DEBUG/INFO/WARN` em stdout e `ERROR` em stderr; não há appender de arquivo
   (`Backend_Java/src/main/resources/application-container.yml:24-33`,

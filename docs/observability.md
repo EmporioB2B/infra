@@ -115,6 +115,23 @@ valores) continua responsabilidade da aplicação. A Infra valida a fronteira
 observada contra labels arbitrárias, IDs, PII e URLs
 (`scripts/check-metrics-cardinality.py`) sem duplicar a allowlist do Backend.
 
+### Radar — métricas internas
+
+O Radar expõe um listener Prometheus separado em `10.254.21.30:8082/metrics`.
+Ele não possui `ports:`; o Prometheus chega ao endpoint exclusivamente pela
+rede interna `radar-metrics-net` (Prometheus `10.254.21.20`). A Infra mantém essa
+rede separada da `metrics-net` do Backend para preservar o teste negativo
+Radar→Backend:8081.
+
+O contrato inclui `radar_health_ready`, métricas de CPU/RSS do processo, HTTP
+RED curado, consultas CEP por UF e cidade primária por código municipal. O
+smoke aplica o mesmo checker de cardinalidade e rejeita CEP, CNPJ, correlation
+ID, path instanciado, query string e PII em labels. A série de cidade é própria
+para tabela/ranking; o Geomap depende de um catálogo posterior que relacione
+`codigo_cidade` a nome e coordenadas. O risco aceito pelo dono do Radar de
+traceback bruto em stderr por timeout do listener não altera a decisão de
+manter o endpoint somente na rede privada, sem publicação ou roteamento externo.
+
 As portas `GRAFANA_PORT` e `VECTOR_FLUENTD_PORT` podem ser alteradas no env
 local se houver conflito. Loki não é publicado no host; é acessado por
 Grafana e Vector na rede `observability`. Prometheus também não é publicado;
