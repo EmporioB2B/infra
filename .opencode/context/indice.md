@@ -23,6 +23,7 @@ contém ponteiros estáveis, não histórico de execução.
 | CI/CD, imagens e GHCR | `arquitetura.md`, skill `cicd-ghcr` |
 | Deploy, Dokploy e rollback | `decisoes.md`, skill `dokploy-deploy` |
 | Testes integrados e E2E | `estado_atual.md`, tasks em `../tasks/futuras/` |
+| Bootstrap e smoke de roles PostgreSQL | `estado_atual.md`, `servicos.md`, `decisoes.md`, `docs/database-roles.md` |
 | Justificativa histórica de decisão | arquivo específico em `../tasks/passadas/` |
 
 ## Regra de leitura

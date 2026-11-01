@@ -218,7 +218,7 @@ volumes:
   bucket público R2, sem `media-gateway` na VPS. O equivalente está descrito
   em `docs/storage-r2-handoff.md`, sem aplicação no R2, Cloudflare ou Dokploy.
 
-## Cadeia CI/CD
+## Cadeia CI/CD (planejado — workflows ainda inexistentes)
 
 ```text
 push em main (repo de aplicação)
@@ -228,15 +228,20 @@ push em main (repo de aplicação)
                      | Radar: uv sync + pytest + ruff)
         job image   docker/build-push-action + cache GHA
                     -> ghcr.io/emporiob2b/<repo>:<sha> e :latest
-        job deploy  (somente em main) curl na API do Dokploy
-                    -> redeploy do stack compose -> pull :latest -> recreate
+                       (tag de deploy = SHA; :latest não seleciona release)
+        job migrate (futuro, Backend) conecta ao Supabase por JDBC direto
+                    -> aplica migrations da imagem SHA selecionada
+        job deploy  (posterior; planejado) curl na API do Dokploy
+                    -> somente após migrate verde; deploy da mesma SHA
 ```
 
 - Cada projeto é um repositório independente, então a detecção de mudança é
   nativa: o workflow roda apenas no repo que recebeu o push.
-- O compose de produção referencia `:latest` com `pull_policy: always`;
-  toda imagem fica também tagueada com o sha do commit para rastreio e
-  rollback (repin do sha anterior + redeploy).
+- **Decisão do operador — planejado:** a seleção da imagem de produção será
+  por SHA, com rollback repinando a SHA anterior. A tag `:latest` ainda pode
+  ser publicada, mas não selecionará release/deploy. A criação dos workflows e
+  do Compose de produção que publiquem/consumam as tags SHA continua posterior;
+  nenhum desses artefatos existe ainda (ver `estado_atual.md`).
 - O repo Infra terá workflow próprio de validação (`docker compose config`,
   hadolint, actionlint) e disparará a suíte de integração sob demanda
   (planejado — nenhum `.github/workflows/` existe ainda em qualquer repo;

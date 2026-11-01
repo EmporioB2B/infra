@@ -133,6 +133,34 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `rustfs:9000` com até 15 tentativas separadas por 2 segundos e o launcher
   imprime os logs do job caso a subida completa falhe; o launcher também
   anuncia a URL do `media-gateway` após a subida.
+- **Existente — Fase 1 de roles PostgreSQL:** `database/bootstrap/roles.sql`
+  cria/configura `emporio_owner` (NOLOGIN), `emporio_migrador` e
+  `emporio_app` (LOGIN), permitindo ao migrador `SET ROLE emporio_owner` sem
+  herança ou delegação de membership; o runtime não recebe membership de owner
+  nem CREATE no database/schema `public`. O bootstrap não define senhas, grants
+  DML de domínio nem `ALTER DEFAULT PRIVILEGES`
+  (`database/bootstrap/roles.sql:3-7,9-85`).
+- **Existente — Fase 1, prova isolada:** `scripts/smoke-db-roles.sh` aceita
+  `postgres:16-alpine` e `postgres:17-alpine`, executa em container descartável
+  com `tmpfs` e credenciais efêmeras geradas em memória; remove o container ao
+  sair. Verifica autenticação, atributos/membership, `SET ROLE`/ownership,
+  restrições de `emporio_app` e fixtures humanas sintéticas. **Não** valida
+  Supabase gerenciado, configuração/ownership real no Supabase, nem a conexão
+  do processo Java como `emporio_app`
+  (`scripts/smoke-db-roles.sh:1-18,26-64,102-183,185-260`).
+- **Limitação existente — Fase 1:** o Compose dev integrado ainda usa
+  `postgres:16-alpine`, banco/usuário `emporio`, e configura o Backend com
+  datasource `emporio`/usuário `emporio`; não aplica o bootstrap de roles, não
+  usa `emporio_app` e não inicia runner Flyway separado
+  (`compose/docker-compose.dev.yml:150-169,177-185`;
+  `Backend_Java/src/main/resources/application-dev.yml:1-6`;
+  `Backend_Java/src/main/resources/application-container.yml:1-8`;
+  `docs/database-roles.md:43-49`).
+- **Planejado — integração posterior:** adaptar o Backend para separar
+  identidade runtime `emporio_app` do runner de migration `emporio_migrador`;
+  executar/validar o desenho de permissões e ownership no Supabase gerenciado.
+  O smoke local descartável não é evidência para esses passos
+  (`docs/database-roles.md:12-15,43-49`).
 - **Planejado — produção:** `APP_STORAGE_R2_PUBLICO_BASE_URL` aponta para
   `https://media.emporiob2b.com.br`, servido diretamente pelo bucket público
   R2, sem `media-gateway` na VPS. `docs/storage-r2-handoff.md` descreve a

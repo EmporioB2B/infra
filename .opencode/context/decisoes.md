@@ -12,7 +12,7 @@
 | Reverse proxy na VPS | **Sem Traefik** | O Back serve HTTP puro (TLS termina na borda Cloudflare); cloudflared roteia por hostname no Zero Trust. Menos uma peça, menos superfície |
 | Entrada pública | **Cloudflare Tunnel** (`cloudflared` container com token) | Nenhuma porta HTTP publicada na VPS; dispensa gestão de certificado local |
 | Domínios | `emporiob2b.com.br`→front, `api.emporiob2b.com.br`→api, `media.emporiob2b.com.br`→bucket público R2 (custom domain, não passa pela VPS) | Desenho do operador; same-site preserva cookie `SameSite=Lax` |
-| Banco em produção | **Supabase externo**; nenhum postgres em container prod | Decisão do operador; dev emula com `postgres:16-alpine` |
+| Banco em produção | **Supabase externo PostgreSQL 17**; nenhum postgres em container prod | Decisão do operador; dev integrado emula com `postgres:16-alpine` |
 
 ## Imagens e CI/CD
 
@@ -20,7 +20,7 @@
 |---|---|---|
 | Registry | **GHCR privado** (`ghcr.io/emporiob2b/*`); Dokploy autentica com PAT | Nativo do GitHub Actions (`GITHUB_TOKEN`), sem conta extra |
 | Detecção de mudança | Workflow **por repositório de aplicação** (push em `main`) | Cada projeto já é um repo independente; paths-filter desnecessário |
-| Tags | `:<sha>` + `:latest`; compose prod usa `:latest` com `pull_policy: always` | Simplicidade no redeploy; sha garante rastreio/rollback |
+| Tags e seleção de versão | Deploy de produção por tag SHA, decidido pelo operador; `:latest` pode continuar publicado, mas não seleciona o deploy | Imagens precisam ser rastreáveis e rollback deve repinar uma SHA; CI/CD que publique/consuma a tag SHA continua **planejado** (não há workflows nem compose prod existentes) |
 | Trigger de deploy | Job final do workflow chama a **API do Dokploy** (`DOKPLOY_API_KEY` em secret) | Redeploy puxa a imagem nova e recria só o container afetado |
 | Gate de testes | Comandos canônicos de cada repo rodam **antes** do build de imagem | Falhou o teste, não publica imagem |
 
@@ -82,10 +82,11 @@ Cloudflare, Dokploy, GitHub):
 - **cloudflared pinado**: imagem do cloudflared com tag específica (não
   `:latest`) e `--no-autoupdate`; atualização é decisão de deploy.
 - **Tags de imagem**: o Production Hardening Guide do Dokploy recomenda
-  evitar `:latest` em produção. Mantido no MVP `:latest` +
-  `pull_policy: always` + tag `:sha` sempre publicada (rollback por
-  repin); **direction of record**: migrar o compose prod para pin por sha
-  via env `*_IMAGE_TAG` (refinamento da TASK-INFRA-003/004).
+  evitar `:latest` em produção. O operador decidiu que o deploy será
+  selecionado por SHA (rollback por repin); a publicação adicional de `:latest`
+  pode continuar, mas essa tag não selecionará o deploy. A automação CI/CD que
+  publique e consuma as tags SHA ainda é posterior/planejada. Não presumir
+  deploy por `:latest` como decisão vigente.
 - **AutoDeploy e arquivos do repo**: o Dokploy faz `git clone` a cada
   deploy e limpa o diretório — nenhum bind-mount de arquivo do repositório
   no compose prod; estado somente em named volumes (habilita Volume

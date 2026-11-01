@@ -158,8 +158,30 @@ estão aposentados.
     Dokploy.
   - Rate limit por IP atrás de proxy: `VALIDACAO_CNPJ_TRUSTED_PROXIES`
     (produção: rede do túnel/containers).
-- Banco: dev/test `postgres:16-alpine` local; **produção Supabase externo**
-  (`SPRING_DATASOURCE_URL` jdbc com SSL). Flyway é dono do schema.
+- Banco: dev/test `postgres:16-alpine` local; **produção Supabase externo
+  PostgreSQL 17** (decisão do operador; `SPRING_DATASOURCE_URL` JDBC com SSL).
+  Flyway é dono do schema. **Existente — Compose dev integrado:** o container
+  usa database e usuário `emporio`, e o Backend recebe o usuário `emporio`
+  (`compose/docker-compose.dev.yml:154-168,177-185`;
+  `Backend_Java/src/main/resources/application-dev.yml:1-6`). A Fase 1 do
+  bootstrap de roles ainda não integra o compose nem a conexão Java:
+  `emporio_app`/`emporio_migrador` não são os usuários conectados pelo stack
+  integrado (`docs/database-roles.md:43-49`).
+- **Existente — Fase 1 de roles:** `database/bootstrap/roles.sql` cria e configura
+  `emporio_owner` como NOLOGIN, `emporio_migrador` e `emporio_app` como LOGIN;
+  o migrador pode fazer `SET ROLE emporio_owner` sem herança/delegação. O
+  runtime não tem membership de owner nem CREATE no database/schema `public`.
+  O script não define senhas, privilégios DML de domínio ou
+  `ALTER DEFAULT PRIVILEGES` (`database/bootstrap/roles.sql:3-7,9-85`).
+- **Existente — Fase 1, teste apenas local descartável:**
+  `scripts/smoke-db-roles.sh` é limitado a `postgres:16-alpine` e
+  `postgres:17-alpine`; usa container com `tmpfs` e credenciais efêmeras, não
+  o Compose persistente. Ele testa autenticação e privilégios PostgreSQL, mas
+  não valida Supabase gerenciado nem que a aplicação Java conecta como
+  `emporio_app` (`scripts/smoke-db-roles.sh:1-18,26-64,102-183,185-260`;
+  `docs/database-roles.md:26-49`). A validação/transferência de ownership no
+  Supabase e a integração pelo runner futuro permanecem **planejadas**
+  (`docs/database-roles.md:12-15,43-49`).
 - Verificação canônica: `./mvnw -B verify` (Testcontainers; exige daemon
   Docker; ~3 min em 8 CPUs).
 
