@@ -100,7 +100,10 @@ role_psql() {
 }
 
 printf '==> PostgreSQL descartável (%s)\n' "$IMAGE"
-printf '%s\n' '==> aplicando bootstrap canônico duas vezes'
+printf '%s\n' '==> aplicando bootstrap e verificando reconciliação de membership'
+admin_psql < "$BOOTSTRAP_SQL"
+admin_psql -c 'REVOKE emporio_owner FROM emporio_migrador'
+admin_psql -c 'GRANT emporio_owner TO emporio_migrador WITH ADMIN TRUE, INHERIT TRUE, SET TRUE'
 admin_psql < "$BOOTSTRAP_SQL"
 admin_psql < "$BOOTSTRAP_SQL"
 

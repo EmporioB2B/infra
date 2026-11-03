@@ -158,30 +158,62 @@ estão aposentados.
     Dokploy.
   - Rate limit por IP atrás de proxy: `VALIDACAO_CNPJ_TRUSTED_PROXIES`
     (produção: rede do túnel/containers).
-- Banco: dev/test `postgres:16-alpine` local; **produção Supabase externo
-  PostgreSQL 17** (decisão do operador; `SPRING_DATASOURCE_URL` JDBC com SSL).
-  Flyway é dono do schema. **Existente — Compose dev integrado:** o container
-  usa database e usuário `emporio`, e o Backend recebe o usuário `emporio`
-  (`compose/docker-compose.dev.yml:154-168,177-185`;
-  `Backend_Java/src/main/resources/application-dev.yml:1-6`). A Fase 1 do
-  bootstrap de roles ainda não integra o compose nem a conexão Java:
-  `emporio_app`/`emporio_migrador` não são os usuários conectados pelo stack
-  integrado (`docs/database-roles.md:43-49`).
+- Banco: **existente — dev integrado** usa `postgres:16-alpine`, database
+  `emporio` e role administrativa parametrizada por `POSTGRES_ADMIN_USER`;
+  **planejado — produção** usa Supabase externo PostgreSQL 17
+  (`SPRING_DATASOURCE_URL` JDBC com SSL). Flyway gerencia as migrations; o
+  owner dos objetos do novo modelo é `emporio_owner`.
+- **Existente — Fase 2, Compose dev integrado:** a sequência é
+  `postgres → db-bootstrap → migrate → backend`. `db-bootstrap` usa a
+  credencial administrativa, monta `database/bootstrap/roles.sql` read-only e
+  define senhas independentes de app/migrador; `migrate` chama `migrate` na
+  imagem Backend como `emporio_migrador`; `backend` conecta como `emporio_app`
+  e tem Flyway desabilitado. A senha admin não chega ao Backend nem a senha
+  migradora ao runtime; a senha app não chega ao job migration
+  (`compose/docker-compose.dev.yml:150-210,217-228,336-353`,
+  `env/.env.dev.example:23-32`, `docs/database-roles.md:47-62`).
+- **Existente — build dev:** `backend` e `migrate` compartilham a tag local
+  `emporio-backend:dev`; o contexto default é `../Backend_Java`, com override
+  `BACKEND_BUILD_CONTEXT`. `scripts/up-dev.sh` reporta branch, SHA curto e
+  clean/dirty do checkout, e sinaliza como não canônico um build fora do clone
+  `../Backend_Java` em `main` limpo
+  (`compose/docker-compose.dev.yml:217-222,336-342`,
+  `scripts/up-dev.sh:18-28,50-79`).
 - **Existente — Fase 1 de roles:** `database/bootstrap/roles.sql` cria e configura
   `emporio_owner` como NOLOGIN, `emporio_migrador` e `emporio_app` como LOGIN;
   o migrador pode fazer `SET ROLE emporio_owner` sem herança/delegação. O
   runtime não tem membership de owner nem CREATE no database/schema `public`.
   O script não define senhas, privilégios DML de domínio ou
-  `ALTER DEFAULT PRIVILEGES` (`database/bootstrap/roles.sql:3-7,9-85`).
-- **Existente — Fase 1, teste apenas local descartável:**
+  `ALTER DEFAULT PRIVILEGES` (`database/bootstrap/roles.sql:3-7,9-95`).
+- **Existente — prova isolada de roles:**
   `scripts/smoke-db-roles.sh` é limitado a `postgres:16-alpine` e
   `postgres:17-alpine`; usa container com `tmpfs` e credenciais efêmeras, não
-  o Compose persistente. Ele testa autenticação e privilégios PostgreSQL, mas
-  não valida Supabase gerenciado nem que a aplicação Java conecta como
-  `emporio_app` (`scripts/smoke-db-roles.sh:1-18,26-64,102-183,185-260`;
-  `docs/database-roles.md:26-49`). A validação/transferência de ownership no
-  Supabase e a integração pelo runner futuro permanecem **planejadas**
-  (`docs/database-roles.md:12-15,43-49`).
+  o Compose persistente. Ele testa autenticação e privilégios PostgreSQL
+  (`scripts/smoke-db-roles.sh:1-18,26-64,102-187,189-263`).
+- **Existente — prova isolada do runner/runtime:**
+  `scripts/smoke-db-migration-runner.sh` aceita `postgres:16-alpine` e
+  `postgres:17-alpine`; ambos os comandos passaram, segundo a execução
+  reportada, com a imagem local `emporio-backend:dev` construída do clone
+  `Backend_Java_Cliente`. Em PostgreSQL descartável sobre tmpfs, aplica V1–V10,
+  confirma health da API Java e sessão runtime como `emporio_app`, e verifica
+  negações de DDL, TRUNCATE e `SET ROLE emporio_owner`, sem volume persistente
+  (`scripts/smoke-db-migration-runner.sh:1-5,22-24,33-48,67-91,93-149`). Não
+  valida o clone canônico `../Backend_Java` nem o Supabase gerenciado.
+- **Existente — dev integrado, execução reportada:** `scripts/up-dev.sh`
+  executado com `BACKEND_BUILD_CONTEXT=../Backend_Java_Cliente`; jobs
+  `db-bootstrap`, `migrate` e `rustfs-init` terminaram com exit 0 e serviços
+  long-lived ficaram healthy. Source branch `dev/cliente`, SHA `bf99658885e9`,
+  dirty com 5 entradas: build de trabalho, não canônico. `scripts/smoke.sh`
+  terminou com exit 0 e passou bootstrap/migration, V10, sessão Java como
+  `emporio_app`, negações DDL/TRUNCATE/SET ROLE, redes, Radar, RustFS e
+  observabilidade; HTTP RED idle foi `SKIP` esperado sem tráfego `/api`. O
+  `emporio-dev_pgdata_v2` foi criado nessa subida; os volumes legados
+  `emporio-dev_pgdata` e `emporio-dev_radar_state` foram reportados como
+  remanescentes e deixados intactos. Isso não valida o clone canônico
+  `../Backend_Java` em `main` nem Supabase gerenciado. Fontes do contrato de
+  verificação: `scripts/up-dev.sh:18-28,50-79,171-198`,
+  `scripts/smoke.sh:83-157,407-412`, `compose/docker-compose.dev.yml:607-610`;
+  execução e saída completas reportadas pelo operador.
 - Verificação canônica: `./mvnw -B verify` (Testcontainers; exige daemon
   Docker; ~3 min em 8 CPUs).
 

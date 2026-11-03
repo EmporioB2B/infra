@@ -90,11 +90,15 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `Radar_Middleware_Python/src/radar_middleware/infrastructure/cep/data/municipios_rfb.csv:1`).
 - **Existente — dev:** os volumes efetivos de banco e estado do Radar são
   `emporio-dev_pgdata_v2` e `emporio-dev_radar_state_v2`. Os volumes antigos
-  permanecem preservados para rollback/investigação manual: o estado antigo do
-  Radar não tinha `cep_cidades`, e o pgdata antigo carregava checksums Flyway
-  incompatíveis (6/8). Essa recuperação é somente local de dev; a produção
-  continua sem PostgreSQL em container e o SQLite do Radar é reconstruível
-  (`compose/docker-compose.dev.yml:534-542`).
+  `emporio-dev_pgdata` e `emporio-dev_radar_state` foram reportados pelo Compose
+  como remanescentes e deixados intactos; na execução integrada reportada,
+  `emporio-dev_pgdata_v2` foi criado. Os volumes antigos são preservados para
+  rollback/investigação manual: o estado antigo do Radar não tinha
+  `cep_cidades`, e o pgdata antigo carregava checksums Flyway incompatíveis
+  (6/8). Essa recuperação é somente local de dev; a produção continua sem
+  PostgreSQL em container e o SQLite do Radar é reconstruível
+  (`compose/docker-compose.dev.yml:534-542,607-610`; execução reportada pelo
+  operador).
 - **Planejado — dev profile:** o perfil `prodlike` (`front-prod`) NÃO foi
   criado — bloqueado pela TASK-INFRA-002; o serviço está documentado no YAML e no
   doc.
@@ -110,13 +114,15 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `rustfs:9000` (fontes: `compose/docker-compose.dev.yml:385-415`,
   `compose/media-gateway.nginx.conf:16-37`,
   `env/.env.dev.example:69-73`).
-- Existe `scripts/seed-admin-dev.sh` para o stack local: ele semeia, em uma
+- **Existente — dev:** `scripts/seed-admin-dev.sh` conecta ao Postgres como o
+  usuário administrativo configurado pelo serviço e define o `search_path`
+  para `identidade,pg_catalog`; semeia, em uma
   transação, o usuário de teste, o vínculo `ATIVO` na organização
   `PLATAFORMA`, o papel `ADMIN_NEGOCIO`/`PLATAFORMA` e as nove capacidades
   administrativas de plataforma. A senha do fixture vem de
   `ADMIN_DEV_PASSWORD` no ambiente local ignorado e não é impressa. O fixture
   continua somente de dev e não cria `perfil_usuario` (fonte do artefato:
-  `scripts/seed-admin-dev.sh:84-249`;
+  `scripts/seed-admin-dev.sh:46-49,84-249`;
   schema/contratos: `Backend_Java/src/main/resources/db/migration/V2__autenticacao_autorizacao.sql:109-145,376-424`).
 - **Limitação existente — dev:** `scripts/seed-admin-dev.sh` só pode rodar
   depois que o Postgres novo estiver saudável e o Flyway do Backend tiver
@@ -139,7 +145,7 @@ Fotografia factual vigente. Não é cronologia de tasks.
   herança ou delegação de membership; o runtime não recebe membership de owner
   nem CREATE no database/schema `public`. O bootstrap não define senhas, grants
   DML de domínio nem `ALTER DEFAULT PRIVILEGES`
-  (`database/bootstrap/roles.sql:3-7,9-85`).
+  (`database/bootstrap/roles.sql:3-7,9-95`).
 - **Existente — Fase 1, prova isolada:** `scripts/smoke-db-roles.sh` aceita
   `postgres:16-alpine` e `postgres:17-alpine`, executa em container descartável
   com `tmpfs` e credenciais efêmeras geradas em memória; remove o container ao
@@ -148,24 +154,59 @@ Fotografia factual vigente. Não é cronologia de tasks.
   Supabase gerenciado, configuração/ownership real no Supabase, nem a conexão
   do processo Java como `emporio_app`
   (`scripts/smoke-db-roles.sh:1-18,26-64,102-183,185-260`).
-- **Limitação existente — Fase 1:** o Compose dev integrado ainda usa
-  `postgres:16-alpine`, banco/usuário `emporio`, e configura o Backend com
-  datasource `emporio`/usuário `emporio`; não aplica o bootstrap de roles, não
-  usa `emporio_app` e não inicia runner Flyway separado
-  (`compose/docker-compose.dev.yml:150-169,177-185`;
-  `Backend_Java/src/main/resources/application-dev.yml:1-6`;
-  `Backend_Java/src/main/resources/application-container.yml:1-8`;
-  `docs/database-roles.md:43-49`).
-- **Planejado — integração posterior:** adaptar o Backend para separar
-  identidade runtime `emporio_app` do runner de migration `emporio_migrador`;
-  executar/validar o desenho de permissões e ownership no Supabase gerenciado.
-  O smoke local descartável não é evidência para esses passos
-  (`docs/database-roles.md:12-15,43-49`).
+- **Existente — Fase 2, Compose dev:** a cadeia é `postgres → db-bootstrap →
+  migrate → backend`; `backend` e `migrate` usam a mesma imagem local
+  `emporio-backend:dev`. `db-bootstrap` executa o SQL canônico read-only e
+  provisiona credenciais distintas; `migrate` executa o runner Flyway do
+  Backend como `emporio_migrador`, e o runtime usa `emporio_app` com
+  `currentSchema` de schemas de domínio, sem segredo admin/migrador
+  (`compose/docker-compose.dev.yml:150-210,217-228,336-353`,
+  `env/.env.dev.example:23-32`, `docs/database-roles.md:47-71`).
+- **Existente — launcher dev:** o contexto de build default é
+  `../Backend_Java`, configurável por `BACKEND_BUILD_CONTEXT`; o launcher
+  reporta branch, SHA curto e estado clean/dirty e classifica checkout que não
+  seja o clone canônico `main` limpo como fonte de trabalho
+  (`compose/docker-compose.dev.yml:217-222`, `scripts/up-dev.sh:18-28,50-79`).
+- **Existente — prova isolada:** `scripts/smoke-db-roles.sh` passou em banco
+  descartável. O `scripts/smoke-db-migration-runner.sh` é parametrizado para
+  `postgres:16-alpine` e `postgres:17-alpine`; ambos os comandos passaram,
+  segundo a execução reportada, usando a imagem local `emporio-backend:dev`
+  construída do clone `Backend_Java_Cliente`. A prova usa PostgreSQL em tmpfs,
+  aplica V1–V10, verifica API Java healthy, sessão runtime como `emporio_app`
+  e nega DDL, TRUNCATE e `SET ROLE` para o runtime, sem volume persistente
+  (`scripts/smoke-db-roles.sh:1-18,49-64,102-187,263`,
+  `scripts/smoke-db-migration-runner.sh:1-5,22-24,33-48,67-91,93-149`). Não
+  valida o clone canônico `../Backend_Java` nem o Supabase gerenciado.
+- **Existente — dev, smoke integrado aprovado (execução reportada):** o operador
+  executou `scripts/up-dev.sh` com
+  `BACKEND_BUILD_CONTEXT=../Backend_Java_Cliente`; `db-bootstrap`, `migrate` e
+  `rustfs-init` terminaram com exit 0 e os serviços de longa duração ficaram
+  healthy. O launcher identificou source branch `dev/cliente`, SHA
+  `bf99658885e9`, dirty com 5 entradas: build de trabalho, não canônico. Nesta
+  sessão, `scripts/smoke.sh` terminou com exit 0; passaram os checks de
+  bootstrap/migration, V10, sessão Java como `emporio_app`, negações de
+  DDL/TRUNCATE/SET ROLE, redes, Radar, RustFS e observabilidade. HTTP RED idle
+  foi `SKIP` esperado, pois não havia tráfego `/api`. O volume
+  `emporio-dev_pgdata_v2` foi criado nesta subida; `emporio-dev_pgdata` e
+  `emporio-dev_radar_state` foram reportados como remanescentes e deixados
+  intactos. A evidência valida esse clone de trabalho e essa execução, não o
+  clone canônico `../Backend_Java` em `main` nem o Supabase gerenciado
+  (launcher: `scripts/up-dev.sh:18-28,50-79,171-198`; verificações:
+  `scripts/smoke.sh:83-157,407-412`; execução e saída completas reportadas pelo
+  operador).
+- **Planejado — produção:** validar o bootstrap/ownership e a separação de
+  credenciais no Supabase gerenciado; nenhuma prova local substitui essa
+  validação (`database/bootstrap/roles.sql:3-7`, `docs/database-roles.md:12-16`).
 - **Planejado — produção:** `APP_STORAGE_R2_PUBLICO_BASE_URL` aponta para
   `https://media.emporiob2b.com.br`, servido diretamente pelo bucket público
   R2, sem `media-gateway` na VPS. `docs/storage-r2-handoff.md` descreve a
   credencial dedicada, prefixo `quarantine/`, policy somente `s3:GetObject` e
   CORS `GET`/`HEAD`; não há aplicação no R2, Cloudflare ou Dokploy.
+- **Existente — decisão de release futura:** TASK-INFRA-003 especifica imagem
+  imutável identificada por SHA/digest, migration e deploy pela mesma
+  referência, com `:latest` apenas alias opcional; workflows ainda são
+  **planejados**. A task continua marcada futura e alinha com essa decisão
+  (`.opencode/tasks/futuras/TASK-INFRA-003-cicd-github-actions-ghcr.md:3,11-15,21-26,60-63`).
 - Ainda NÃO existem neste repo: `compose/docker-compose.e2e.yml` e
   `docker-compose.prod.yml`, `env/.env.prod.example`, `cloudflare/`,
   `scripts/e2e-run.sh`, `docs/deploy-dokploy.md`, `docs/rollback.md`,

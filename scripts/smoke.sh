@@ -29,6 +29,8 @@
 #      tráfego /api desde o boot;
 #  19. Radar não alcança a porta de management;
 #  20. metrics-net/radar-net possuem exatamente os membros contratados.
+#  21. bootstrap+migrate concluíram; runtime usa emporio_app, V10 foi aplicada
+#      e uma sessão do Backend Java aparece no PostgreSQL sob essa role.
 #
 # Exit != 0 se algum check falhar; o smoke continua os demais checks para dar
 # o panorama completo.
@@ -59,6 +61,102 @@ fi
 FAIL=0
 ok()   { printf 'OK   %s\n' "$*"; }
 bad()  { printf 'FAIL %s\n' "$*"; FAIL=1; }
+
+db_admin_query() {
+  local sql="$1"
+  # The command is evaluated inside the Postgres container; keep credentials
+  # from that service's environment and only pass the non-secret SQL as $1.
+  # shellcheck disable=SC2016
+  compose exec -T postgres sh -ec \
+    'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$POSTGRES_USER" -d emporio -At -c "$1"' \
+    smoke-db-admin "$sql"
+}
+
+job_succeeded() {
+  local service="$1" container state
+  container="$(compose ps -aq "$service")"
+  [[ -n "$container" ]] || return 1
+  state="$(docker inspect --format '{{.State.Status}} {{.State.ExitCode}}' "$container" 2>/dev/null || true)"
+  [[ "$state" == "exited 0" ]]
+}
+
+# 0. Banco e jobs one-shot DB-08: prova credenciais/política sem imprimir envs.
+if job_succeeded db-bootstrap && job_succeeded migrate; then
+  ok "postgres roles: db-bootstrap e migrate concluíram com exit 0"
+else
+  bad "postgres roles: bootstrap/migrate ausente ou não terminou com exit 0"
+fi
+
+# This assertion intentionally expands only inside the Backend container.
+# shellcheck disable=SC2016
+if compose exec -T backend sh -ec '
+  test "$SPRING_DATASOURCE_USERNAME" = emporio_app
+  test "$SPRING_FLYWAY_ENABLED" = false
+  case "$SPRING_DATASOURCE_URL" in
+    *currentSchema=identidade,catalogo,mercadoria,comercial,infraestrutura,venda,pedidos*) ;;
+    *) exit 1 ;;
+  esac
+  test -z "${POSTGRES_ADMIN_PASSWORD:-}"
+  test -z "${POSTGRES_ADMIN_USER:-}"
+  test -z "${SPRING_FLYWAY_URL:-}"
+  test -z "${SPRING_FLYWAY_PASSWORD:-}"
+  test -z "${SPRING_FLYWAY_USER:-}"
+'; then
+  ok "backend: datasource fixo em emporio_app; credenciais admin/migrador ausentes"
+else
+  bad "backend: identidade runtime incorreta ou ambiente privilegiado presente"
+fi
+
+backend_container="$(compose ps -q backend)"
+migrate_container="$(compose ps -aq migrate)"
+backend_image_id="$(docker inspect --format '{{.Image}}' "$backend_container" 2>/dev/null || true)"
+migrate_image_id="$(docker inspect --format '{{.Image}}' "$migrate_container" 2>/dev/null || true)"
+if [[ -n "$backend_image_id" && "$backend_image_id" == "$migrate_image_id" ]]; then
+  ok "backend/migrate: mesma imagem local construída"
+else
+  bad "backend/migrate: image IDs diferentes ou serviço ausente"
+fi
+
+role_policy="$(db_admin_query "
+  SELECT owner.rolcanlogin = false
+     AND migrator.rolcanlogin = true
+     AND app.rolcanlogin = true
+     AND NOT owner.rolsuper AND NOT migrator.rolsuper AND NOT app.rolsuper
+     AND pg_catalog.pg_has_role('emporio_migrador', 'emporio_owner', 'SET')
+     AND NOT pg_catalog.pg_has_role('emporio_app', 'emporio_owner', 'SET')
+     AND NOT pg_catalog.has_database_privilege('emporio_app', current_database(), 'CREATE')
+     AND NOT pg_catalog.has_schema_privilege('emporio_app', 'public', 'CREATE')
+     AND NOT pg_catalog.has_table_privilege('emporio_app', 'identidade.usuario', 'TRUNCATE')
+  FROM pg_catalog.pg_roles owner
+  CROSS JOIN pg_catalog.pg_roles migrator
+  CROSS JOIN pg_catalog.pg_roles app
+  WHERE owner.rolname='emporio_owner'
+    AND migrator.rolname='emporio_migrador'
+    AND app.rolname='emporio_app'")" || true
+if [[ "$role_policy" == t ]]; then
+  ok "postgres roles: owner/migrador/app e limites DDL/TRUNCATE conformes"
+else
+  bad "postgres roles: atributos, membership ou negações de emporio_app divergiram"
+fi
+
+migration_v10="$(db_admin_query "SELECT EXISTS (SELECT 1 FROM public.flyway_schema_history WHERE version='10' AND success)")" || true
+if [[ "$migration_v10" == t ]]; then
+  ok "flyway: V10 registrada como aplicada"
+else
+  bad "flyway: V10 ausente/falha no histórico public.flyway_schema_history"
+fi
+
+runtime_db_session="f"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  runtime_db_session="$(db_admin_query "SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_stat_activity WHERE datname=current_database() AND usename='emporio_app' AND pid <> pg_backend_pid())" 2>/dev/null || true)"
+  [[ "$runtime_db_session" == t ]] && break
+  sleep 1
+done
+if [[ "$runtime_db_session" == t ]]; then
+  ok "backend: conexão PostgreSQL ativa observada como emporio_app"
+else
+  bad "backend: não foi observada sessão Java no PostgreSQL como emporio_app"
+fi
 
 # 1. api management (somente pela interface interna)
 # shellcheck disable=SC2016 # a variável deve expandir dentro do container backend

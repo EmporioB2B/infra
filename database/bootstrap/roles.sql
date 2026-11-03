@@ -29,6 +29,16 @@ ALTER ROLE emporio_app
 
 -- Só o migrador pode mudar explicitamente sua identidade efetiva para o owner.
 -- Privilégios não são herdados e a membership não pode ser repassada.
+SELECT 'REVOKE emporio_owner FROM emporio_migrador'
+WHERE EXISTS (
+  SELECT 1
+  FROM pg_catalog.pg_auth_members
+  WHERE roleid = 'emporio_owner'::regrole
+    AND member = 'emporio_migrador'::regrole
+    AND NOT (set_option AND NOT inherit_option AND NOT admin_option)
+)
+\gexec
+
 SELECT 'GRANT emporio_owner TO emporio_migrador WITH ADMIN FALSE, INHERIT FALSE, SET TRUE'
 WHERE NOT EXISTS (
   SELECT 1

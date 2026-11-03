@@ -20,7 +20,7 @@
 |---|---|---|
 | Registry | **GHCR privado** (`ghcr.io/emporiob2b/*`); Dokploy autentica com PAT | Nativo do GitHub Actions (`GITHUB_TOKEN`), sem conta extra |
 | Detecção de mudança | Workflow **por repositório de aplicação** (push em `main`) | Cada projeto já é um repo independente; paths-filter desnecessário |
-| Tags e seleção de versão | Deploy de produção por tag SHA, decidido pelo operador; `:latest` pode continuar publicado, mas não seleciona o deploy | Imagens precisam ser rastreáveis e rollback deve repinar uma SHA; CI/CD que publique/consuma a tag SHA continua **planejado** (não há workflows nem compose prod existentes) |
+| Tags e seleção de versão | Deploy de produção por referência imutável SHA/digest, decidido pelo operador; `:latest` pode continuar publicado somente como alias, mas não seleciona o deploy | Imagens precisam ser rastreáveis e rollback deve repinar a referência imutável; CI/CD que publique/consuma SHA/digest continua **planejado** (não há workflows nem compose prod existentes) |
 | Trigger de deploy | Job final do workflow chama a **API do Dokploy** (`DOKPLOY_API_KEY` em secret) | Redeploy puxa a imagem nova e recria só o container afetado |
 | Gate de testes | Comandos canônicos de cada repo rodam **antes** do build de imagem | Falhou o teste, não publica imagem |
 
@@ -83,10 +83,11 @@ Cloudflare, Dokploy, GitHub):
   `:latest`) e `--no-autoupdate`; atualização é decisão de deploy.
 - **Tags de imagem**: o Production Hardening Guide do Dokploy recomenda
   evitar `:latest` em produção. O operador decidiu que o deploy será
-  selecionado por SHA (rollback por repin); a publicação adicional de `:latest`
-  pode continuar, mas essa tag não selecionará o deploy. A automação CI/CD que
-  publique e consuma as tags SHA ainda é posterior/planejada. Não presumir
-  deploy por `:latest` como decisão vigente.
+  selecionado por referência imutável SHA/digest (rollback por repin); a
+  publicação adicional de `:latest` pode continuar somente como alias, nunca
+  seleciona o deploy. A automação CI/CD que publique e consuma essa referência
+  ainda é posterior/planejada. Não presumir deploy por `:latest` como decisão
+  vigente.
 - **AutoDeploy e arquivos do repo**: o Dokploy faz `git clone` a cada
   deploy e limpa o diretório — nenhum bind-mount de arquivo do repositório
   no compose prod; estado somente em named volumes (habilita Volume

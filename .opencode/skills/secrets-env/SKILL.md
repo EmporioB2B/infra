@@ -16,7 +16,7 @@ Actions, Production Hardening Guide do Dokploy, práticas 12-factor
 | Camada | Onde | O que contém |
 |---|---|---|
 | Versionado | `env/*.example`, compose (`${VAR}`) | nomes, defaults seguros, placeholders |
-| Dev local | `.env` local (ignorado), `.env` do repo Radar (ignorado lá) | senhas de dev, chaves RustFS, JWT de dev, credenciais R2 de teste |
+| Dev local | `env/.env.dev` local (ignorado), `.env` do repo Radar (ignorado lá) | admin Postgres dev, senha `emporio_app`, senha `emporio_migrador`, outras senhas/chaves dev, credenciais R2 de teste |
 | CI | GitHub secrets/environments por repo | `DOKPLOY_API_KEY`, ids de stack; `GITHUB_TOKEN` é automático |
 | Produção | painel do Dokploy (Environment do compose → `.env` na VPS) ou Secrets Provider | tudo que é segredo de prod |
 | Borda | dashboard Cloudflare | token do túnel (referenciado, nunca copiado para o repo) |
@@ -36,7 +36,10 @@ Regras estruturais:
 ## Inventário de segredos do sistema
 
 - **Back**: `APP_JWT_SECRET` (≥256 bits), `SPRING_DATASOURCE_PASSWORD`
-  (Supabase em prod), `SMTP_PASSWORD`, chaves R2 read-write e read-only
+  (`emporio_app`, Supabase em prod), `SPRING_FLYWAY_PASSWORD`
+  (`emporio_migrador`, secret do job de migration em produção),
+  `POSTGRES_ADMIN_PASSWORD` (admin do Postgres somente dev), `SMTP_PASSWORD`,
+  chaves R2 read-write e read-only
   (`APP_STORAGE_*`), `APP_STORAGE_R2_*`;
 - **Radar**: `CLOUDFLARE_KEY_ID`/`CLOUDFLARE_SECRET_KEY` (bucket privado
   de Parquets);

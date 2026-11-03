@@ -237,16 +237,17 @@ SELECT u.email, u.status AS usuario_status, v.status AS vinculo_status,
 EOF
 )
 
-# socket local dentro do container postgres é auth trust na imagem oficial —
-# nenhum segredo atravessa este script.
+# A conexão administrativa é explícita e autentica por TCP loopback dentro do
+# container. Credencial vem do ambiente do serviço, não deste script nem argv.
 # ATENÇÃO: o psql 16 SÓ interpola :'var' em stdin/-f — com -c a string vai
 # crua ao servidor (reproduzido em 2026-09-26), por isso o SQL entra por pipe.
 printf '%s\n' "$SQL" | docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T postgres \
-  psql -v ON_ERROR_STOP=1 \
-      -v uid="$ADMIN_USER_ID" -v vid="$ADMIN_VINCULO_ID" \
-      -v org="$ADMIN_PLATFORM_ID" \
-      -v hash="$HASH" -v email="$ADMIN_EMAIL" -v nome="$ADMIN_NOME" \
-      -U emporio -d emporio -f -
+  sh -ec 'PGPASSWORD="$POSTGRES_PASSWORD" PGOPTIONS="-c search_path=identidade,pg_catalog" exec psql -X -v ON_ERROR_STOP=1 \
+      -v uid="$1" -v vid="$2" -v org="$3" \
+      -v hash="$4" -v email="$5" -v nome="$6" \
+      -h 127.0.0.1 -U "$POSTGRES_USER" -d emporio -f -' \
+      seed-admin-dev "$ADMIN_USER_ID" "$ADMIN_VINCULO_ID" \
+      "$ADMIN_PLATFORM_ID" "$HASH" "$ADMIN_EMAIL" "$ADMIN_NOME"
 
 echo
 echo "Admin de dev pronto: ${ADMIN_EMAIL} (senha local fornecida por ADMIN_DEV_PASSWORD; login via POST /api/v1/auth/login ou a tela de login do front)"

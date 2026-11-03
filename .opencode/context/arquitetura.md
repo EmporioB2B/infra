@@ -74,7 +74,11 @@ Detalhes de portas/publicação em `docs/networks.md`:
 ```text
 services:
   postgres   postgres:16-alpine (db emporio)          127.0.0.1:5432
-  backend    build ../Backend_Java (dev,container)    127.0.0.1:8080
+  db-bootstrap → migrate → backend (one-shot → API)
+              roles SQL read-only; admin → migrador → app
+  backend    emporio-backend:dev (build default ../Backend_Java;
+              BACKEND_BUILD_CONTEXT override)         127.0.0.1:8080
+  migrate    mesma imagem emporio-backend:dev; runner `migrate`
              management 10.254.20.10:8081 somente na metrics-net
   radar      build ../Radar_Middleware_Python         SEM portas;
              env_file local do Radar (R2 de teste); metrics 10.254.21.30:8082
@@ -103,10 +107,25 @@ networks:
   radar-metrics-net internal: radar:10.254.21.30 ↔ prometheus:10.254.21.20
 
 volumes:
-  pgdata, rustfs-data, radar_state, prometheus-data (named); bind-mount somente-leitura
+  pgdata = emporio-dev_pgdata_v2, rustfs-data, radar_state,
+  prometheus-data (named); bind-mount somente-leitura
   de certs/dev para backend e mailpit (material TLS efêmero de dev,
   ignorado pelo git); loki-data, vector-data e grafana-data (named)
 ```
+
+- **Existente — Fase 2 dev:** `postgres → db-bootstrap → migrate → backend`
+  é a cadeia codificada no Compose. `backend` e `migrate` usam a mesma imagem
+  local; o launcher informa branch/SHA/dirty status da fonte de build.
+  O smoke isolado do runner passou em PostgreSQL 16 e 17 em tmpfs, com imagem
+  local construída do clone de trabalho `Backend_Java_Cliente`, não com o clone
+  canônico `../Backend_Java`; comprova V1–V10, health Java, runtime
+  `emporio_app` e negações de DDL/TRUNCATE/`SET ROLE`, sem volume persistente.
+  A validação do stack completo (`up-dev.sh` + `smoke.sh`) não foi executada
+  porque o volume persistente `emporio-dev_pgdata_v2` existe e não foi tocado;
+  sua remoção é decisão deliberada do operador. Supabase gerenciado não foi testado
+  (`compose/docker-compose.dev.yml:150-210,217-228,336-353`,
+  `scripts/up-dev.sh:50-79,171-198`,
+  `scripts/smoke-db-migration-runner.sh:1-5,22-24,33-48,67-91,93-149`).
 
 - **Existente — dev:** os volumes nomeados efetivos do banco e do estado do
   Radar são `emporio-dev_pgdata_v2` e `emporio-dev_radar_state_v2`. Eles

@@ -61,7 +61,8 @@ arquivos, networking) e Production Hardening Guide do Dokploy.
   postgres: `pg_isready`);
 - `interval`/`timeout`/`retries`/`start_period` calibrados: start_period
   cobre o bootstrap real (radar sincroniza SQLite do R2 no startup:
-  90s+; api com Flyway: 30–40s);
+  90s+; Backend runtime não executa Flyway no boot — migration usa job
+  one-shot separado, aguardado por `service_completed_successfully`);
 - dependência de prontidão usa `depends_on` com
   `condition: service_healthy` (ou `service_completed_successfully` para
   jobs one-shot como `rustfs-init`);

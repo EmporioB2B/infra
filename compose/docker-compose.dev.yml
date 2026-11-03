@@ -149,20 +149,20 @@ services:
 
   # ---------------------------------------------------------------------------
   # Banco do Back em dev (produção usa Supabase externo; nunca espelhar isto
-  # para prod). Espelha o postgres-dev do repo Backend_Java.
+  # para prod). Roles greenfield: postgres admin → bootstrap → migrate → backend.
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: emporio
-      POSTGRES_USER: emporio
-      POSTGRES_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD obrigatória (senha do postgres de dev)}
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER:?POSTGRES_ADMIN_USER obrigatória (admin local do Postgres)}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?POSTGRES_ADMIN_PASSWORD obrigatória (admin local do Postgres)}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U emporio -d emporio"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d emporio"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -170,21 +170,68 @@ services:
     logging: *dev-logging
 
   # ---------------------------------------------------------------------------
+  # Bootstrap one-shot das roles. O SQL canônico da Infra é montado somente
+  # leitura; senhas são definidas via psql stdin, sem argv/log. Este job é
+  # idempotente e não transfere ownership de bancos/volumes antigos.
+  # ---------------------------------------------------------------------------
+  db-bootstrap:
+    image: postgres:16-alpine
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        test -n "$$PGPASSWORD" \
+          && test -n "$$EMPORIO_APP_DB_PASSWORD" \
+          && test -n "$$EMPORIO_MIGRATOR_DB_PASSWORD" \
+          && test "$$PGPASSWORD" != "$$EMPORIO_APP_DB_PASSWORD" \
+          && test "$$PGPASSWORD" != "$$EMPORIO_MIGRATOR_DB_PASSWORD" \
+          && test "$$EMPORIO_APP_DB_PASSWORD" != "$$EMPORIO_MIGRATOR_DB_PASSWORD"
+        psql -X -v ON_ERROR_STOP=1 -f /bootstrap/roles.sql
+        psql -X -v ON_ERROR_STOP=1 <<'SQL'
+        \getenv app_password EMPORIO_APP_DB_PASSWORD
+        \getenv migrator_password EMPORIO_MIGRATOR_DB_PASSWORD
+        ALTER ROLE emporio_app PASSWORD :'app_password';
+        ALTER ROLE emporio_migrador PASSWORD :'migrator_password';
+        SQL
+        echo "Bootstrap de roles concluído para o database configurado."
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: emporio
+      PGUSER: ${POSTGRES_ADMIN_USER:?POSTGRES_ADMIN_USER obrigatória}
+      PGPASSWORD: ${POSTGRES_ADMIN_PASSWORD:?POSTGRES_ADMIN_PASSWORD obrigatória}
+      EMPORIO_APP_DB_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD obrigatória para emporio_app}
+      EMPORIO_MIGRATOR_DB_PASSWORD: ${SPRING_FLYWAY_PASSWORD:?SPRING_FLYWAY_PASSWORD obrigatória para emporio_migrador}
+    volumes:
+      - ../database/bootstrap/roles.sql:/bootstrap/roles.sql:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    logging: *local-logging
+
+  # ---------------------------------------------------------------------------
   # API Spring Boot. O nome do serviço É `backend` de propósito: o
   # proxy.conf.json do Front aponta para http://backend:8080. Em produção o
   # mesmo serviço se chama `api`.
   # ---------------------------------------------------------------------------
   backend:
+    image: emporio-backend:dev
     build:
-      context: ../../Backend_Java
+      context: ${BACKEND_BUILD_CONTEXT:-../../Backend_Java}
       dockerfile: Dockerfile
     environment:
       SPRING_PROFILES_ACTIVE: dev,container
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/emporio
-      SPRING_DATASOURCE_USERNAME: emporio
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/emporio?currentSchema=identidade,catalogo,mercadoria,comercial,infraestrutura,venda,pedidos
+      SPRING_DATASOURCE_USERNAME: emporio_app
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD obrigatória}
+      SPRING_FLYWAY_ENABLED: "false"
       APP_JWT_SECRET: ${APP_JWT_SECRET:?APP_JWT_SECRET obrigatória (>=256 bits; gere com openssl rand -hex 32)}
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:4200}
+      # Nunca herdar privilégios de provisionamento ou migration para runtime.
+      POSTGRES_ADMIN_PASSWORD: ""
+      SPRING_FLYWAY_URL: ""
+      SPRING_FLYWAY_USER: ""
+      SPRING_FLYWAY_PASSWORD: ""
       RADAR_BASE_URL: http://radar:8000
       MANAGEMENT_SERVER_ADDRESS: *backend-metrics-address
       # O default do Back (application.yml: read 1s / connect 500ms) é curto
@@ -262,6 +309,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       rustfs-init:
         condition: service_completed_successfully
       mailpit:
@@ -283,6 +332,25 @@ services:
         ipv4_address: *backend-metrics-address
     restart: unless-stopped
     logging: *dev-logging
+
+  # ---------------------------------------------------------------------------
+  # Flyway one-shot do Backend. Usa a mesma imagem construída para `backend`;
+  # a credencial migradora nunca é injetada no serviço runtime.
+  # ---------------------------------------------------------------------------
+  migrate:
+    image: emporio-backend:dev
+    command: ["migrate"]
+    environment:
+      SPRING_FLYWAY_URL: jdbc:postgresql://postgres:5432/emporio?currentSchema=public,identidade,catalogo,mercadoria,comercial,infraestrutura,venda,pedidos,financeiro,fiscal,relatorio
+      SPRING_FLYWAY_USER: emporio_migrador
+      SPRING_FLYWAY_PASSWORD: ${SPRING_FLYWAY_PASSWORD:?SPRING_FLYWAY_PASSWORD obrigatória}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-bootstrap:
+        condition: service_completed_successfully
+    restart: "no"
+    logging: *local-logging
 
   # ---------------------------------------------------------------------------
   # Radar — SEM `ports:` (nunca publicar no host) e preso à radar-net
