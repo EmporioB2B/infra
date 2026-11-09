@@ -90,6 +90,7 @@ fi
 # (que tem $ no meio).
 # shellcheck disable=SC2016  # sed abaixo casa o LITERAL $2y$, sem expandir
 SQL=$(cat <<'EOF'
+SET search_path = identidade, catalogo, mercadoria, comercial, infraestrutura, venda, pedidos, public;
 BEGIN;
 
 INSERT INTO usuario (id, email, nome, senha_hash, status, email_verificado_em)

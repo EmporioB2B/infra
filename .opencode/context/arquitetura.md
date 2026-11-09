@@ -113,19 +113,11 @@ volumes:
   ignorado pelo git); loki-data, vector-data e grafana-data (named)
 ```
 
-- **Existente — Fase 2 dev:** `postgres → db-bootstrap → migrate → backend`
-  é a cadeia codificada no Compose. `backend` e `migrate` usam a mesma imagem
-  local; o launcher informa branch/SHA/dirty status da fonte de build.
-  O smoke isolado do runner passou em PostgreSQL 16 e 17 em tmpfs, com imagem
-  local construída do clone de trabalho `Backend_Java_Cliente`, não com o clone
-  canônico `../Backend_Java`; comprova V1–V10, health Java, runtime
-  `emporio_app` e negações de DDL/TRUNCATE/`SET ROLE`, sem volume persistente.
-  A validação do stack completo (`up-dev.sh` + `smoke.sh`) não foi executada
-  porque o volume persistente `emporio-dev_pgdata_v2` existe e não foi tocado;
-  sua remoção é decisão deliberada do operador. Supabase gerenciado não foi testado
-  (`compose/docker-compose.dev.yml:150-210,217-228,336-353`,
-  `scripts/up-dev.sh:50-79,171-198`,
-  `scripts/smoke-db-migration-runner.sh:1-5,22-24,33-48,67-91,93-149`).
+- **Existente — dev integrado:** banco segue `postgres → db-bootstrap → migrate → backend`. O bootstrap monta `database/bootstrap/roles.sql` como somente-leitura e recebe credenciais por ambiente; `migrate` é one-shot com `SPRING_FLYWAY_*`; a API runtime usa `emporio_app` e só inicia após a migration concluir com sucesso. A URL JDBC de migration usa `currentSchema` public-first; a URL runtime lista os schemas de domínio. `scripts/up-dev.sh` informa branch, SHA curto e estado clean/dirty; checkout fora do clone canônico `../Backend_Java` em `main` limpo é classificado como build de trabalho, não bloqueado (`compose/docker-compose.dev.yml:154-353`; `scripts/up-dev.sh:18-79,171-230`).
+- **Existente — Fase 2 dev integrado:** `postgres → db-bootstrap → migrate → backend` é a cadeia do Compose. `backend` e `migrate` compartilham `emporio-backend:dev`; o launcher identifica branch, SHA e dirty state da fonte de build. O runner executa isoladamente em PostgreSQL descartável 16/17 via `tmpfs`; essa prova não substitui o Compose integrado (`compose/docker-compose.dev.yml:150-210,217-228,340-353`; `scripts/up-dev.sh:18-79,185-230`).
+- **Credenciais dev:** `POSTGRES_ADMIN_USER/PASSWORD`, `SPRING_DATASOURCE_PASSWORD` e `SPRING_FLYWAY_PASSWORD` são configurações locais; o Backend recebe somente a senha runtime, e `migrate` somente a migradora. O bootstrap valida as três senhas (mínimo 32 caracteres alfanuméricos, distintas) sem imprimir seus valores (`env/.env.dev.example:23-36`; `compose/docker-compose.dev.yml:177-215`).
+- **Validação integrada dev:** em 2026-11-09, `scripts/up-dev.sh --no-build` concluiu os jobs e iniciou serviços healthy; `scripts/smoke.sh` passou inclusive isolamento, métricas, mídia, RustFS e CORS; seed repetido confirmou os registros do admin sem duplicatas. O preflight indicou Backend em `main`, SHA `8eed3342dfecb4656df68d712dff1ef5389668d4`; como foi usado `--no-build`, isso não prova que a imagem local existente veio desse checkout. Os volumes v2 e legados foram preservados. Supabase gerenciado não foi testado (evidência: `.opencode/tasks/passadas/20261109_TASK-INFRA-016-db-bootstrap-migrate-dev.md`).
+- **Planejado — produção:** o fluxo de roles/bootstrap e migration no Supabase gerenciado ainda exige validação operacional; a integração dev não constitui prova de prontidão de produção (`../Backend_Java/docs/database/DB-08-13-contrato-infra-backend.md:283-285,357-360`).
 
 - **Existente — dev:** os volumes nomeados efetivos do banco e do estado do
   Radar são `emporio-dev_pgdata_v2` e `emporio-dev_radar_state_v2`. Eles

@@ -58,6 +58,8 @@ com sucesso antes de a API iniciar.
 Para dev local, mantenha valores distintos somente em `env/.env.dev`, que é
 ignorado pelo Git: admin Postgres, `SPRING_DATASOURCE_PASSWORD` (app) e
 `SPRING_FLYWAY_PASSWORD` (migrador). `.env.dev.example` contém placeholders.
+O `db-bootstrap` exige que as três senhas tenham pelo menos 32 caracteres
+alfanuméricos e sejam distintas; usa mensagens de erro sem imprimir os valores.
 O Backend não recebe a senha administrativa nem a migradora; a senha da role
 app não deve aparecer no job `migrate`. Não passe senhas como argumentos nem
 imprima a configuração resolvida.
@@ -71,10 +73,12 @@ clean/dirty; uma branch de trabalho ou working tree modificada é identificada
 como build não canônico, não bloqueada. O modo `--no-build` reutiliza a imagem
 local existente.
 
-O volume antigo não é migrado automaticamente. Bootstrap e launcher não
-transferem ownership, apagam nem recriam volumes; a adoção greenfield requer a
-remoção deliberada pelo operador do volume antigo. Nunca use este bootstrap no
-Supabase/prod antes da validação gerenciada e do plano de ownership existente.
+Um volume antigo não é migrado automaticamente. Bootstrap e launcher não
+transferem ownership, apagam nem recriam volumes. Se a identidade administrativa
+ou o schema persistido forem incompatíveis, pare a subida e obtenha uma
+estratégia explícita de compatibilidade/adoção que preserve o volume; não tente
+contornar com comandos destrutivos. Nunca use este bootstrap no Supabase/prod
+antes da validação gerenciada e do plano de ownership existente.
 
 ## Smokes
 

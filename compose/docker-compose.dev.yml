@@ -179,12 +179,29 @@ services:
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
-        test -n "$$PGPASSWORD" \
-          && test -n "$$EMPORIO_APP_DB_PASSWORD" \
-          && test -n "$$EMPORIO_MIGRATOR_DB_PASSWORD" \
-          && test "$$PGPASSWORD" != "$$EMPORIO_APP_DB_PASSWORD" \
-          && test "$$PGPASSWORD" != "$$EMPORIO_MIGRATOR_DB_PASSWORD" \
-          && test "$$EMPORIO_APP_DB_PASSWORD" != "$$EMPORIO_MIGRATOR_DB_PASSWORD"
+        require_password() {
+          name="$$1"
+          value="$$2"
+          if [ "$${#value}" -lt 32 ]; then
+            echo "ERRO: $$name deve ter ao menos 32 caracteres alfanuméricos" >&2
+            exit 1
+          fi
+          case "$$value" in
+            *[!A-Za-z0-9]*)
+              echo "ERRO: $$name deve conter somente caracteres alfanuméricos" >&2
+              exit 1
+              ;;
+          esac
+        }
+        require_password POSTGRES_ADMIN_PASSWORD "$$PGPASSWORD"
+        require_password SPRING_DATASOURCE_PASSWORD "$$EMPORIO_APP_DB_PASSWORD"
+        require_password SPRING_FLYWAY_PASSWORD "$$EMPORIO_MIGRATOR_DB_PASSWORD"
+        if [ "$$PGPASSWORD" = "$$EMPORIO_APP_DB_PASSWORD" ] \
+          || [ "$$PGPASSWORD" = "$$EMPORIO_MIGRATOR_DB_PASSWORD" ] \
+          || [ "$$EMPORIO_APP_DB_PASSWORD" = "$$EMPORIO_MIGRATOR_DB_PASSWORD" ]; then
+          echo "ERRO: as credenciais admin, runtime e migration devem ser distintas" >&2
+          exit 1
+        fi
         psql -X -v ON_ERROR_STOP=1 -f /bootstrap/roles.sql
         psql -X -v ON_ERROR_STOP=1 <<'SQL'
         \getenv app_password EMPORIO_APP_DB_PASSWORD

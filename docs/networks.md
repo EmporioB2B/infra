@@ -32,12 +32,35 @@ emuladores no lugar dos serviços externos e sem cloudflared.
 
 | Rede | Tipo | Membros | Regra |
 |---|---|---|---|
-| `default` | bridge | front-dev, backend, postgres, rustfs, rustfs-init, media-gateway, mailpit | tráfego interno do stack; toda publicação no host é prefixada `127.0.0.1` |
+| `default` | bridge | front-dev, backend, postgres, db-bootstrap, migrate, rustfs, rustfs-init, media-gateway, mailpit | tráfego interno do stack; toda publicação no host é prefixada `127.0.0.1` |
 | `radar-net` | bridge **`internal: true`** | backend, radar | única via para a API privada do Radar; sem gateway — nada entra/sai dela pelo host nem por outras redes |
 | `egress` | bridge | radar | saída controlada para o R2 de teste real e ViaCEP |
 | `observability` | bridge | vector, loki, grafana, prometheus | pipeline local de logs e consulta de métricas; sem acesso a `radar-net`; Vector recebe somente pela porta de loopback publicada pelo host |
 | `metrics-net` | bridge **`internal: true`** | backend, prometheus | único caminho do scraper para `backend:8081`; subnet `10.254.20.0/24`, gateway `10.254.20.1`; sem portas publicadas |
 | `radar-metrics-net` | bridge **`internal: true`** | radar, prometheus | único caminho do scraper para `radar:8082/metrics`; subnet `10.254.21.0/24`, gateway `10.254.21.1`; sem portas publicadas |
+
+## Bootstrap do banco local
+
+O launcher executa o fluxo de banco sem iniciar o Backend antes do schema:
+
+```text
+postgres healthy → db-bootstrap (roles.sql + senhas) → migrate (one-shot)
+→ backend healthy → front-dev
+```
+
+`db-bootstrap` recebe a credencial administrativa do Postgres e as senhas de
+`emporio_app`/`emporio_migrador`; compara os três valores sem imprimi-los e
+recusa valores abaixo de 32 caracteres, não alfanuméricos ou repetidos. O
+artefato `database/bootstrap/roles.sql` é montado somente-leitura. O job
+`migrate` recebe somente `SPRING_FLYWAY_URL`, `SPRING_FLYWAY_USER` e
+`SPRING_FLYWAY_PASSWORD`; o Backend runtime recebe somente as credenciais de
+`emporio_app`. O seed do admin roda após o Backend e usa o `search_path` dos
+schemas de domínio.
+
+No volume dev já existente, o administrador inicial continua sendo `emporio`;
+`POSTGRES_ADMIN_PASSWORD` precisa corresponder à senha já inicializada nesse
+volume. Ver o procedimento local no [`README.md`](../README.md). O launcher não
+remove nem recria volumes.
 
 - **Radar nunca publica porta no Compose integrado da Infra** (`ports:` ausente
   no dev/prod canônico). O Compose standalone do repo Radar pode publicar 8000

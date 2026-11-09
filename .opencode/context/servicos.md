@@ -214,6 +214,24 @@ estão aposentados.
   verificação: `scripts/up-dev.sh:18-28,50-79,171-198`,
   `scripts/smoke.sh:83-157,407-412`, `compose/docker-compose.dev.yml:607-610`;
   execução e saída completas reportadas pelo operador.
+- **Existente — dev integrado / contrato DB-08:** `db-bootstrap` monta o
+  bootstrap SQL em read-only; define senhas de `emporio_app` e
+  `emporio_migrador` por `psql` stdin usando `\getenv` e quoting do psql. Valida
+  três credenciais distintas, mínimo 32 caracteres alfanuméricos sem imprimir
+  valores. O Backend não recebe credenciais administrativas ou de migration
+  (`compose/docker-compose.dev.yml:177-215,217-353`;
+  `env/.env.dev.example:23-36`; `database/bootstrap/roles.sql:3-99`).
+- **Existente — dev integrado:** migration usa URL public-first e o runner
+  one-shot `SPRING_FLYWAY_*`; runtime usa `emporio_app` com
+  `currentSchema=identidade,catalogo,mercadoria,comercial,infraestrutura,venda,pedidos`.
+  Flyway automático permanece desabilitado no serviço API (`compose/docker-compose.dev.yml:340-353`; `Backend_Java/src/main/resources/application.yml:37-40`; `Backend_Java/src/main/resources/application-container.yml:2-12`).
+- **Validação integrada dev (2026-11-09):** `scripts/up-dev.sh --no-build`
+  concluiu jobs e healthchecks; seed repetido manteve admin, vínculo, papel e
+  nove capacidades; `scripts/smoke.sh` passou. O preflight identificou
+  `Backend_Java` em `main` no SHA `8eed3342dfecb4656df68d712dff1ef5389668d4`,
+  mas `--no-build` reutilizou imagem local e não comprova sua origem. Os
+  volumes legados foram mantidos. A validação não abrange Supabase/produção
+  (`.opencode/tasks/passadas/20261109_TASK-INFRA-016-db-bootstrap-migrate-dev.md`).
 - Verificação canônica: `./mvnw -B verify` (Testcontainers; exige daemon
   Docker; ~3 min em 8 CPUs).
 

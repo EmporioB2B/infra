@@ -12,59 +12,58 @@ Os repositórios `infra`, `Backend_Java`, `Front_Angular` e
 primeira subida:
 
 1. Copie `env/.env.dev.example` para `env/.env.dev` e preencha os valores
-   locais exigidos. PostgreSQL requer três senhas distintas: admin (`POSTGRES_ADMIN_PASSWORD`),
-   runtime (`SPRING_DATASOURCE_PASSWORD`) e migration (`SPRING_FLYWAY_PASSWORD`).
-   Inclua também a senha da UI do Grafana e o par dedicado
-   `RUSTFS_READ_ONLY_QUARANTINE_{ACCESS_KEY,SECRET_KEY}`. Não versione o arquivo real.
-2. Garanta que `Radar_Middleware_Python/.env` esteja configurado localmente;
-   ele contém as credenciais do R2 de teste e não deve ser copiado para este
-   repositório.
-3. Em `env/.env.dev`, defina também `ADMIN_DEV_PASSWORD` com uma senha
-   exclusiva para o admin local. O valor é usado somente pelo seed ignorado e
-   nunca é impresso ou versionado.
-4. Execute na raiz deste repositório:
+   locais exigidos, incluindo a senha da UI do Grafana e o par dedicado
+   `RUSTFS_READ_ONLY_QUARANTINE_{ACCESS_KEY,SECRET_KEY}`. As três credenciais
+   PostgreSQL (`POSTGRES_ADMIN_PASSWORD`, `SPRING_DATASOURCE_PASSWORD` e
+   `SPRING_FLYWAY_PASSWORD`) devem ser distintas, alfanuméricas e ter pelo
+   menos 32 caracteres (`openssl rand -hex 32`). Não versione o arquivo real.
+2. Em um volume PostgreSQL existente, `POSTGRES_ADMIN_USER` e
+   `POSTGRES_ADMIN_PASSWORD` precisam corresponder à role administrativa já
+   inicializada. O Compose não migra roles nem remove/recria volumes; se a
+   identidade existente diferir do example, ajuste apenas a configuração local
+   para uma role administrativa compatível ou pare e peça orientação antes de
+   subir. Em banco novo, use os valores do example substituídos por credenciais
+   aleatórias distintas.
+3. Garanta que `Radar_Middleware_Python/.env` esteja configurado localmente;
+   ele contém credenciais do R2 de teste e não deve ser copiado para este repo.
+4. Defina `ADMIN_DEV_PASSWORD` no `env/.env.dev` com uma senha exclusiva para
+   o admin local. O valor é usado pelo seed ignorado e nunca é impresso ou
+   versionado.
+5. Execute na raiz deste repositório:
 
    ```bash
    scripts/up-dev.sh
    ```
 
-   Use `scripts/up-dev.sh --no-build` quando as imagens locais já estiverem
-   atualizadas. O launcher verifica a configuração, inicia o RustFS e executa
-   o fluxo PostgreSQL `postgres → db-bootstrap → migrate → backend`, aguardando
-   os serviços ficarem saudáveis. O runtime usa `emporio_app`; a migration
-   one-shot usa `emporio_migrador`; nenhum recebe a senha administrativa.
-   Para verificar o ambiente, execute `scripts/smoke.sh`.
+   Use `scripts/up-dev.sh --no-build` quando a imagem local já estiver
+   construída. O launcher identifica branch/SHA/dirty state do clone Backend e
+   executa `postgres → db-bootstrap → migrate → backend`, aguardando jobs
+   one-shot e healthchecks. Runtime usa `emporio_app`, migration usa
+   `emporio_migrador`; credenciais privilegiadas não são injetadas no runtime.
+   Verifique o ambiente com `scripts/smoke.sh`.
 
    O desenvolvimento diário constrói uma única imagem local mutável
-   `emporio-backend:dev` para migration e API — não é necessário atualizar SHA
-   a cada commit. A fonte padrão é o clone `../Backend_Java`. O launcher mostra
-   branch, SHA curto e estado clean/dirty. Para testar explicitamente outro
-   checkout, por exemplo:
+   `emporio-backend:dev` para migration e API. A fonte padrão é o clone
+   `../Backend_Java`; para testar outro checkout explicitamente:
 
    ```bash
    BACKEND_BUILD_CONTEXT=../Backend_Java_Cliente scripts/up-dev.sh
    ```
 
-   Esse build é marcado como checkout de trabalho, não como fonte canônica de
-   `main`. O launcher não remove nem migra volumes. A adoção greenfield exige
-   que o operador remova deliberadamente o volume de Postgres antigo antes do
-   primeiro uso deste modelo.
+   Builds de branch ou working tree modificada são identificados como não
+   canônicos. O launcher não remove, migra nem recria volumes.
 
-Para testar bootstrap + runner Flyway + Backend runtime em Postgres descartável,
-sem tocar o volume do Compose integrado:
+Para testar o runner Flyway e o Backend runtime em PostgreSQL descartável, sem
+usar o volume integrado:
 
 ```bash
 scripts/smoke-db-migration-runner.sh emporio-backend:dev postgres:16-alpine
 scripts/smoke-db-migration-runner.sh emporio-backend:dev postgres:17-alpine
 ```
 
-O smoke usa credenciais efêmeras e tmpfs. Ele prova o runner e a conexão Java
-com `emporio_app` em PostgreSQL local; não substitui a validação do stack
-completo nem a prova no Supabase gerenciado.
-
-As credenciais reais ficam somente em `env/.env.dev` (ignorado pelo Git). O
-bootstrap não grava senha no SQL nem imprime a configuração; não reutilize
-credenciais de dev em produção.
+O smoke usa credenciais efêmeras e `tmpfs`; não substitui a prova no Supabase.
+As credenciais reais ficam somente em `env/.env.dev` (ignorado pelo Git); o
+bootstrap não grava senhas no SQL nem imprime a configuração.
 
 ### Fotos públicas no navegador
 

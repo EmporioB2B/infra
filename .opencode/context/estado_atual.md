@@ -17,6 +17,7 @@ Fotografia factual vigente. Não é cronologia de tasks.
   tarefas locais do operador em `.opencode/tasks/`.
 - **Existente — dev:** compose de desenvolvimento em
   `compose/docker-compose.dev.yml`, definindo todos os serviços de longa duração,
+  e jobs one-shot `db-bootstrap` e `migrate` para o contrato DB-08 Infra–Backend;
   `media-gateway` local para fotos públicas, `scripts/smoke.sh`, policy
   dedicada, isolamento da `radar-net`, SMTP dev e observabilidade local
   Vector/Loki/Prometheus/Grafana. Arquivos de suporte:
@@ -36,8 +37,9 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `loki-data`, `vector-data` e `grafana-data`. O Vector também não monta o
   socket; seu healthcheck consulta a API local de liveness, enquanto a
   validação de configuração e o smoke verificam a chegada de um log do Backend
-  ao Loki. O bootstrap aguarda os healthchecks declarados
-  (`scripts/up-dev.sh:82-103`; `compose/docker-compose.dev.yml:53-546`)
+  ao Loki. O launcher aguarda healthchecks dos serviços long-lived e estados
+  de sucesso dos jobs one-shot (`scripts/up-dev.sh:75-81,122-154`;
+  `compose/docker-compose.dev.yml:53-596`)
   e o smoke contém a prova de ingestão (`scripts/smoke.sh:362-367`).
 - **Existente — dev:** o Backend e o Prometheus participam da `metrics-net`
   (`internal: true`, subnet `10.254.20.0/24`); o Backend usa
@@ -125,19 +127,24 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `scripts/seed-admin-dev.sh:46-49,84-249`;
   schema/contratos: `Backend_Java/src/main/resources/db/migration/V2__autenticacao_autorizacao.sql:109-145,376-424`).
 - **Limitação existente — dev:** `scripts/seed-admin-dev.sh` só pode rodar
-  depois que o Postgres novo estiver saudável e o Flyway do Backend tiver
-  aplicado o schema vigente; ele cria o usuário, vínculo, papel e nove
+  depois que o Postgres novo estiver saudável e o serviço one-shot `migrate`
+  tiver aplicado o schema vigente; o SQL do seed define `search_path` para
+  `identidade,catalogo,mercadoria,comercial,infraestrutura,venda,pedidos,public`.
+  Ele cria o usuário, vínculo, papel e nove
   capacidades, mas não cria `perfil_usuario`. É um seed local do Back, não uma
-  preparação de produção (`scripts/seed-admin-dev.sh:46-49,84-161,204-249`,
+  preparação de produção (`scripts/seed-admin-dev.sh:46-49,92-94,204-250`,
   `Backend_Java/src/main/resources/application.yml:37-39`,
   `Backend_Java/src/main/resources/db/migration/V2__autenticacao_autorizacao.sql:16-60`).
+- **Existente — dev integrado / contrato DB-08:** `database/bootstrap/roles.sql` é o artefato Infra canônico para `psql`, sem senhas nem grants DML de domínio; o Compose o monta em `db-bootstrap` como read-only e injeta as senhas de serviço por ambiente. `db-bootstrap` verifica que as três credenciais tenham ao menos 32 caracteres, sejam somente alfanuméricas e distintas, sem imprimir valores. `migrate` chama `migrate` com `SPRING_FLYWAY_*`; `backend` usa `emporio_app`, `SPRING_DATASOURCE_PASSWORD` e `currentSchema` dos schemas de domínio, dependendo de sucesso do job. `env/.env.dev.example` nomeia as três variáveis. `scripts/up-dev.sh --no-build` completou os jobs e deixou os serviços healthy; o seed idempotente confirmou os registros do admin e `scripts/smoke.sh` passou os gates de API, métricas, isolamento, Front, RustFS, mídia e CORS. O histórico Flyway e `identidade.usuario` existem no PostgreSQL dev. Os volumes legados foram preservados (`database/bootstrap/roles.sql:3-5`; `compose/docker-compose.dev.yml:154-368`; `env/.env.dev.example:21-27`).
+- **Existente — preflight dev:** `scripts/up-dev.sh` identifica branch, SHA curto e dirty state do contexto Backend configurado; permite checkout de trabalho com aviso, enquanto apenas o clone `../Backend_Java` em `main` limpo é classificado canônico. Não lê `.env` do Backend (`scripts/up-dev.sh:18-28,50-79`).
+- **Planejado — produção:** validar bootstrap/roles e a sequência de migration em PostgreSQL 17 gerenciado/Supabase ainda é requisito antes de afirmar prontidão; testes em PostgreSQL descartável e Compose dev não demonstram essa prontidão (`../Backend_Java/docs/database/DB-08-13-contrato-infra-backend.md:283-285,357-360`).
 - **Existente — dev:** `scripts/up-dev.sh` inicia RustFS antes do restante do stack, confirma seu
   attachment à rede default do projeto e recria somente o container RustFS
   se a rede estiver ausente, preservando `rustfs-data`. O job
   `rustfs-init` usa `scripts/init-rustfs.sh` read-only, cria as credenciais
   read-only geral e dedicada da quarentena, espera o endpoint
   `rustfs:9000` com até 15 tentativas separadas por 2 segundos e o launcher
-  imprime os logs do job caso a subida completa falhe; o launcher também
+  imprime os logs do job caso falhe; o launcher também
   anuncia a URL do `media-gateway` após a subida.
 - **Existente — Fase 1 de roles PostgreSQL:** `database/bootstrap/roles.sql`
   cria/configura `emporio_owner` (NOLOGIN), `emporio_migrador` e
