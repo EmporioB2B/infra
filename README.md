@@ -5,6 +5,15 @@ infraestrutura compartilhada do Emporio B2B. O stack local inclui Backend,
 Frontend, Radar, PostgreSQL, RustFS, media-gateway, Mailpit e observabilidade
 local com Vector, Loki, Prometheus e Grafana.
 
+Uma VPS Oracle Cloud em São Paulo foi provisionada para **staging primeiro**;
+a intenção é hospedar produção futuramente no mesmo host, com isolamento apenas
+lógico entre stacks. Dokploy `v0.31.0` está instalado; o projeto/serviço Compose
+de staging existe no painel, mas ainda sem YAML ou aplicações. Cloudflare
+Tunnel e Access ainda não foram configurados. Consulte
+[`docs/oracle-vps.md`](docs/oracle-vps.md) e o contexto técnico em
+[`.opencode/context/vps_oracle.md`](.opencode/context/vps_oracle.md) antes de
+preparar o host.
+
 ## Subir o ambiente local
 
 Os repositórios `infra`, `Backend_Java`, `Front_Angular` e

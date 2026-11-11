@@ -12,6 +12,7 @@ contém ponteiros estáveis, não histórico de execução.
 | `servicos.md` | imagens, portas, envs reais, healthchecks e restrições de cada serviço |
 | `decisoes.md` | decisões arquiteturais aprovadas e suas justificativas |
 | `estado_atual.md` | fotografia factual do que existe hoje |
+| `vps_oracle.md` | estado factual e segurança da VPS OCI em São Paulo |
 
 ## Consultar conforme o escopo
 
@@ -22,6 +23,7 @@ contém ponteiros estáveis, não histórico de execução.
 | Cloudflare, domínios, túnel, media/R2 | `arquitetura.md`, skill `cloudflare-edge` |
 | CI/CD, imagens e GHCR | `arquitetura.md`, skill `cicd-ghcr` |
 | Deploy, Dokploy e rollback | `decisoes.md`, skill `dokploy-deploy` |
+| VPS OCI, hardening do host e ambientes compartilhados | `vps_oracle.md`, `arquitetura.md`, skill `dokploy-deploy` |
 | Testes integrados e E2E | `estado_atual.md`, tasks em `../tasks/futuras/` |
 | Bootstrap e smoke de roles PostgreSQL | `estado_atual.md`, `servicos.md`, `decisoes.md`, `docs/database-roles.md` |
 | Justificativa histórica de decisão | arquivo específico em `../tasks/passadas/` |

@@ -8,9 +8,17 @@
 
 | Tema | Decisão | Justificativa |
 |---|---|---|
-| Plataforma de deploy | **Dokploy** self-hosted na VPS, stack do tipo Compose apontando para este repo (branch `main`) | Painel pronto para compose + envs + registry; operador já usa o termo "dockploy" para ele |
-| Reverse proxy na VPS | **Sem Traefik** | O Back serve HTTP puro (TLS termina na borda Cloudflare); cloudflared roteia por hostname no Zero Trust. Menos uma peça, menos superfície |
+| Plataforma de deploy | **Dokploy v0.31.0** self-hosted na VPS OCI; staging primeiro e produção depois na mesma máquina, em projetos/stacks distintos; Compose deste repo na branch `main` | Não há segunda máquina disponível; Dokploy atende Compose, envs e registry. Instalado em 2026-11-11 |
+| Reverse proxy de aplicação | **Sem proxy próprio/sem Nginx Basic Auth**; o Traefik instalado pelo Dokploy não será o destino das rotas do Tunnel | TLS e proteção de staging ficam na Cloudflare; `cloudflared` aponta diretamente aos containers. O Dokploy mantém o Traefik interno dele |
 | Entrada pública | **Cloudflare Tunnel** (`cloudflared` container com token) | Nenhuma porta HTTP publicada na VPS; dispensa gestão de certificado local |
+| Proteção do staging | **Cloudflare Access**, aplicado na borda aos hostnames de front e API; ainda não configurado | Gate de identidade sem publicar porta de autenticação na VPS; preferência do operador em vez de senha Basic Auth no Nginx |
+| Staging + produção no mesmo host | **Decidido por restrição de recursos:** ambos na mesma VPS OCI; stacks/redes/volumes/segredos separados, sem dados/credenciais de produção no staging | Não constitui isolamento forte; comprometimento do host/Docker ou exaustão de recursos pode afetar os dois. Isolamento forte exigiria outra VM, indisponível agora |
+| Administração do host | Manter usuário OCI `ubuntu`, SSH por chave, sem senha e sem login SSH direto de root; nenhum usuário Linux adicional para separar os ambientes | Usuários Linux não criam, por si, isolamento de stacks; o Dokploy usa Docker/Swarm rootful e rootless não é substituto direto |
+| MFA do painel Dokploy | **Adiado temporariamente por decisão explícita do operador**; painel fica exclusivamente atrás de SSH forwarding até TASK-INFRA-022 | Exceção temporária aceita; não criar rota externa/Cloudflare para o painel antes de concluir MFA/passkey |
+| Arquitetura da VM | Oracle Cloud `VM.Standard.A1.Flex`, ARM64 (`aarch64`); imagens GHCR multiarch `linux/amd64,linux/arm64` antes de deploy | A1 é ARM; workflows ainda não existem; a skill `cicd-ghcr` agora exige as duas plataformas |
+| Banco do staging | PostgreSQL em container local enquanto schema/migrations estão em construção; versão a confirmar (alvo sugerido PG17) | Isola staging do Supabase produtivo; migrations evoluem sem tocar produção |
+| R2/SMTP do staging | R2 e SMTP reais de teste/staging, com credenciais válidas e escopo não produtivo | Testar integração real sem reutilizar segredos ou dados de produção |
+| Branch/release flow | Sem branch longa `staging`: PR para `main`; merge publica SHA/digest multiarch e atualiza staging; produção depois promove os mesmos digests com aprovação | Evita drift entre branch e ambiente e preserva rastreabilidade |
 | Domínios | `emporiob2b.com.br`→front, `api.emporiob2b.com.br`→api, `media.emporiob2b.com.br`→bucket público R2 (custom domain, não passa pela VPS) | Desenho do operador; same-site preserva cookie `SameSite=Lax` |
 | Banco em produção | **Supabase externo PostgreSQL 17**; nenhum postgres em container prod | Decisão do operador; dev integrado emula com `postgres:16-alpine` |
 

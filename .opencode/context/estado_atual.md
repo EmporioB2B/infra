@@ -15,6 +15,40 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `cloudflare-edge`, `dokploy-deploy`, `cicd-ghcr`, `secrets-env`,
   `observability-logs`, `verification-before-completion`), histórico da análise de bootstrap e
   tarefas locais do operador em `.opencode/tasks/`.
+- **Existente — VPS OCI (2026-11-11):** instância `emporio-infra-sp` em
+  `SA-VINHEDO-1`/AD-1, `VM.Standard.A1.Flex` (4 OCPUs/24 GB ARM64), Ubuntu
+  24.04 Minimal aarch64 e boot volume 100 GB. A console marcou o shape como
+  Always Free-eligible; cobrança/uso total não foi auditado. VCN/subnet pública,
+  rota pelo Internet Gateway e regra de SSH restrita ao IP de saída do operador
+  foram reportadas como criadas; detalhes e evidência em
+  [`vps_oracle.md`](vps_oracle.md) e
+  [`../../docs/oracle-vps.md`](../../docs/oracle-vps.md).
+- **Existente — acesso da VPS:** SSH como `ubuntu` por chave, `sudo` funcional;
+  `PermitRootLogin no`, `PasswordAuthentication no`,
+  `KbdInteractiveAuthentication no`. Nova sessão validada. Nmap TCP da origem
+  autorizada encontrou só `22/tcp open`; não foi scan UDP.
+- **Existente — Dokploy (2026-11-11):** `v0.31.0` instalado; serviços
+  `dokploy`/`dokploy-postgres` reportados 1/1 Running e Traefik Up. O projeto
+  `Emporio Staging` e um serviço Compose foram criados no painel, sem YAML ou
+  app implantado. Nmap TCP pós-instalação (22/80/443/3000), da origem autorizada,
+  mostrou só 22/tcp aberta; containers publicam portas localmente, OCI bloqueia
+  ingress web. Painel acessado por SSH forward `:13000`; operador adiou
+  MFA/passkey e aceitou exceção temporária. TASK-INFRA-018 foi arquivada com
+  esta exceção; TASK-INFRA-022 acompanha o MFA. Não criar rota não-SSH ao painel
+  enquanto ela estiver pendente.
+- **Contrato decidido para staging:** PostgreSQL container local enquanto
+  migrations estão em construção; R2 e SMTP reais de teste/staging. Versão do
+  Postgres, hostnames, buckets/escopos das credenciais seguem TASK-INFRA-019;
+  nenhum valor secreto registrado. **Planejado — staging:** PostgreSQL ainda
+  não foi criado; não há ambiente de aplicação implantado.
+- **Plano aprovado — hosting:** staging primeiro; produção futura dividirá a
+  mesma VPS por não haver outra máquina. Stacks, redes e segredos separados não
+  formam uma fronteira forte de segurança. Cloudflare Access para staging foi
+  escolhido; Tunnel, Access e aplicações ainda não foram instalados/configurados.
+- **Gate de plataforma:** a VPS é ARM64. Imagens de app precisam de
+  `linux/arm64`; workflows ainda inexistentes. A skill canônica CI/CD agora
+  exige publicações multiarch `linux/amd64,linux/arm64`; resolver nos repos
+  donos e validar no staging antes de deploy de aplicação.
 - **Existente — dev:** compose de desenvolvimento em
   `compose/docker-compose.dev.yml`, definindo todos os serviços de longa duração,
   e jobs one-shot `db-bootstrap` e `migrate` para o contrato DB-08 Infra–Backend;
@@ -174,6 +208,10 @@ Fotografia factual vigente. Não é cronologia de tasks.
   reporta branch, SHA curto e estado clean/dirty e classifica checkout que não
   seja o clone canônico `main` limpo como fonte de trabalho
   (`compose/docker-compose.dev.yml:217-222`, `scripts/up-dev.sh:18-28,50-79`).
+- **Existente — launcher dev:** a subida padrão constrói explicitamente as
+  imagens locais do Backend e do Radar antes de iniciar o stack; `--no-build`
+  reutiliza as imagens locais existentes e falha se qualquer uma estiver
+  ausente (`scripts/up-dev.sh:28-29,155-166`).
 - **Existente — prova isolada:** `scripts/smoke-db-roles.sh` passou em banco
   descartável. O `scripts/smoke-db-migration-runner.sh` é parametrizado para
   `postgres:16-alpine` e `postgres:17-alpine`; ambos os comandos passaram,
@@ -222,7 +260,7 @@ Fotografia factual vigente. Não é cronologia de tasks.
 - Dockerfiles de produção prontos e revisados nos 3 projetos principais
   (Back: temurin 25 + usuário não-root + healthcheck em 8081; Front: SSR
   node:22 porta 4000; Radar: python 3.12 slim porta 8000 sem portas
-  publicadas).
+  publicadas). A publicação de imagens `linux/arm64` para a VPS ainda é gate.
 - **Existente — Backend_Java:** Overrides de dev maduros no repo do Back: `docker-compose.yml`
   (backend + postgres-dev + postgres-test), `docker-compose.rustfs.yml`
   (R2 local com bootstrap idempotente de buckets e credenciais read-only
@@ -295,11 +333,19 @@ Fotografia factual vigente. Não é cronologia de tasks.
   de topologia da Infra; até lá os painéis de memória usam a heap agregada da
   JVM.
 - Backlog futuro (não bloqueia o MVP de deploy): mTLS/gateway interno do
-  Radar (TASK-080/006 no repo Back e TASK-006 no repo Radar), staging,
+  Radar (TASK-080/006 no repo Back e TASK-006 no repo Radar),
   monitoramento/uptime, backup do Supabase, entrada do Hermes no stack,
   pin de imagem por sha no Dokploy. A integração de produção com Grafana Cloud
   Loki permanece planejada: o Dokploy configura o provider e instala
   `dokploy-vector`; nenhum Loki/Grafana entra no Compose da aplicação.
+- **Planejado — staging:** contrato do ambiente, Compose e primeiro deploy ainda
+  pendentes. O Dokploy está instalado, mas nenhum ambiente de aplicação está
+  implantado; MFA do painel foi adiado com exceção aceita (TASK-INFRA-022), e
+  imagens ARM64/pré-requisitos do Front também são gates.
+  Produção na mesma máquina continua futura e requer revisão explícita de
+  recursos/isolamento (`docs/oracle-vps.md:12-20,83-91`;
+  `tasks/passadas/20261112_TASK-INFRA-018-hardening-dokploy-excecao-mfa.md`;
+  `.opencode/tasks/futuras/TASK-INFRA-019-contrato-staging.md:3-8`).
 - Intenção de produto registrada apenas no rascunho aposentado da raiz
   (destruído em 2026-09-26): integração de **gateway de pagamento**
   (`PAYMENT_GATEWAY_BASE_URL/CLIENT_ID/CLIENT_SECRET/TOKEN/

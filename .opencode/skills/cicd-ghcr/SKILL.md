@@ -20,8 +20,10 @@ metadata-action, build-push-action) e docs do Dokploy (Auto Deploy/API).
 - **least privilege**: `permissions: contents: read` como default do
   workflow; `packages: write` somente no job `image`; `id-token: write`
   somente se attestation estiver ativa; nenhum `write-all`;
-- **reprodutibilidade**: runner `ubuntu-latest`, plataforma
-  `linux/amd64` (VPS x86) explícita; multi-arch só com necessidade real.
+- **reprodutibilidade e compatibilidade de runtime**: runner
+  `ubuntu-latest`; publicar `linux/amd64` e `linux/arm64` para suportar a VPS
+  Oracle A1 ARM64 e clientes x86. A build multiarch não substitui smoke no
+  runtime ARM64; imagens base/dependências também precisam oferecer ARM64.
 
 ## Segurança de supply chain (regras do guia oficial)
 
@@ -73,8 +75,11 @@ permissions: { contents: read }
   3. `docker/metadata-action` → tags `type=sha,format=long` +
      `type=raw,value=latest` (só em main);
   4. `docker/build-push-action` com `context: .`, `platforms:
-     linux/amd64`, `cache-from: type=gha`, `cache-to: type=gha,mode=max`,
+     linux/amd64,linux/arm64`, `cache-from: type=gha`,
+     `cache-to: type=gha,mode=max`,
      `push: true`;
+     usar runner ARM64 nativo ou configurar QEMU/buildx para instruções `RUN`
+     cross-platform; o staging ARM64 continua sendo gate de validação real;
   5. opcional (recomendado): `actions/attest` (provenance/SBOM) — se o
      pull no Dokploy apresentar atrito com attestation, documentar
      `provenance: false` como decisão, não como descoberta silenciosa;

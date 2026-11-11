@@ -60,6 +60,57 @@ futura no repo Radar). Enquanto isso, a mitigação é estrutural: rede
 `radar-net` interna e exclusiva, nenhuma porta publicada, egress somente
 para R2/ViaCEP.
 
+## Hospedagem OCI: staging primeiro, produção no mesmo host (planejado)
+
+**Decisão do operador (2026-11-11):** provisionar staging primeiro e hospedar
+produção futuramente na mesma VPS por não haver uma segunda máquina disponível.
+O estado factual da instância e da rede está em
+[`vps_oracle.md`](vps_oracle.md), com runbook em
+[`../../docs/oracle-vps.md`](../../docs/oracle-vps.md).
+
+```text
+Browser → Cloudflare Access (staging) → Cloudflare Tunnel (outbound da VPS)
+                                      → front/api do stack staging
+
+VPS OCI única: Dokploy instalado + staging primeiro + produção futura
+                projetos/stacks, redes, volumes e segredos separados
+```
+
+- A VM `VM.Standard.A1.Flex` roda Ubuntu 24.04 Minimal `aarch64`; a console OCI
+  mostrou 4 OCPUs/24 GB como Always Free-eligible. Confirmar faturamento/quotas
+  diretamente na tenancy; o selo do shape não comprova todos os recursos.
+- Ingress OCI observado/configurado: SSH TCP/22 do IPv4 do operador em `/32`;
+  não abrir 80/443/3000. A conexão `cloudflared` é outbound. Enquanto MFA/
+  passkey estiver pendente na TASK-INFRA-022, o painel Dokploy fica somente via
+  SSH forwarding local; não criar rota Tunnel/Access, DNS público ou ingress
+  OCI para o painel.
+- Staging será protegido por Cloudflare Access; não será adicionado Nginx Basic
+  Auth na VPS. Os hostnames e o Tunnel ainda não foram criados. Proteger tanto
+  o hostname do Front quanto o da API do staging.
+- Stacks separados no mesmo Docker host são isolamento operacional, não
+  isolamento forte: kernel, daemon e recursos físicos são compartilhados.
+  Exigir segredos, banco, storage e dados de staging distintos; nunca permitir
+  que staging use credenciais/dados de produção.
+- **Contrato de staging decidido:** PostgreSQL em container local enquanto
+  migrations/schema estão em construção; R2 e SMTP serão serviços reais de
+  teste/staging com credenciais próprias. Versão do Postgres, buckets/escopos e
+  hostnames são fechados na TASK-INFRA-019. Produção continua usando Supabase
+  externo e não terá Postgres container.
+- A arquitetura pretendida continua sem Traefik de aplicação: o Dokploy traz o
+  Traefik dele, mas o Tunnel roteará diretamente aos containers. O modo de
+  isolamento de deployments do Dokploy permanece por avaliar antes de implantar
+  stacks de aplicação.
+- **Gate ARM64:** imagens GHCR precisam incluir `linux/arm64`. A skill
+  `cicd-ghcr` foi atualizada para exigir `linux/amd64,linux/arm64`; workflows de
+  CI ainda não existem. Resolver nos repositórios donos e validar no staging
+  ARM64 antes do deploy de produção.
+- **Existente (2026-11-11):** Dokploy v0.31.0 instalado; projeto e serviço
+  Compose `Emporio Staging` criados no painel, sem YAML nem aplicações, e o
+  PostgreSQL de staging ainda não foi criado. Tunnel e Access ainda não
+  configurados; painel acessado por SSH forward. MFA/passkey foi adiado com
+  exceção temporária aceita e é acompanhado pela TASK-INFRA-022. Evidências em
+  `vps_oracle.md`.
+
 ## Desenvolvimento/integração (máquina local)
 
 **Existente — dev:** mesma topologia principal de redes da produção planejada,
