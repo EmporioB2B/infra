@@ -26,6 +26,7 @@ if [[ "$BACKEND_SOURCE_INPUT" != /* ]]; then
 fi
 BACKEND_SOURCE="$(realpath -e "$BACKEND_SOURCE_INPUT" 2>/dev/null || true)"
 BACKEND_DEV_IMAGE="emporio-backend:dev"
+RADAR_DEV_IMAGE="emporio-dev-radar:latest"
 
 BUILD_FLAG=("--build")
 if [[ "${1:-}" == "--no-build" ]]; then
@@ -153,13 +154,15 @@ echo "==> validando compose (config --quiet)"
 compose config --quiet
 
 if [[ ${#BUILD_FLAG[@]} -gt 0 ]]; then
-  echo "==> construindo uma única imagem backend para migrate + backend"
-  compose build backend
+  echo "==> construindo backend (migrate + backend) e radar a partir dos repos irmãos"
+  compose build backend radar
 else
-  echo "==> --no-build: usando a imagem local existente $BACKEND_DEV_IMAGE"
-  echo "AVISO: branch/SHA acima descrevem o checkout selecionado, não comprovam a origem da imagem reutilizada."
+  echo "==> --no-build: usando as imagens locais existentes do backend e do radar"
+  echo "AVISO: branch/SHA acima descrevem o checkout do Backend, não comprovam a origem das imagens reutilizadas."
   docker image inspect "$BACKEND_DEV_IMAGE" >/dev/null 2>&1 \
     || fail "imagem local ausente: $BACKEND_DEV_IMAGE (remova --no-build para construí-la)"
+  docker image inspect "$RADAR_DEV_IMAGE" >/dev/null 2>&1 \
+    || fail "imagem local ausente: $RADAR_DEV_IMAGE (remova --no-build para construí-la)"
 fi
 
 echo "==> subindo e aguardando observabilidade local"
