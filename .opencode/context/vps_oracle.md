@@ -82,12 +82,17 @@ na console antes de qualquer operação. O runbook legível está em
 - Decisão do operador: começar por **staging** e, por falta de uma segunda
   máquina disponível, hospedar futuramente **staging e produção na mesma VPS**.
   Nenhum ambiente de aplicação está implantado ainda e o PostgreSQL de staging
-  ainda não foi criado.
-- Decisões de staging: PostgreSQL local em container enquanto schema/migrations
-  estão em construção; R2 e SMTP serão serviços reais de teste/staging com
-  credenciais válidas. Versão do Postgres, buckets/escopos das credenciais e
-  hostnames ainda precisam ser fechados na TASK-INFRA-019; nenhum valor secreto
-  será persistido aqui.
+  ainda não foi criado. O repo contém o Compose da TASK-INFRA-020, ainda não
+  carregado no serviço do painel.
+- Contrato aprovado na TASK-INFRA-019: PostgreSQL 17 local com bootstrap,
+  migrador e runtime separados; sem dados de produção. Back e Radar terão
+  recursos/credenciais R2 de staging dedicados e separados; Radar usa R2 real.
+  SMTP real terá credencial distinta da produção e STARTTLS+AUTH, com remetente
+  de teste e destinatários controlados. Hostnames aprovados:
+  `staging.emporiob2b.com.br`, `api-staging.emporiob2b.com.br` e
+  `media-staging.emporiob2b.com.br` para Custom Domain do bucket público R2.
+  Buckets, credenciais, sender e dados SMTP concretos ainda não foram provisionados e
+  nenhum segredo é persistido aqui.
 - Os ambientes serão stacks/projetos Dokploy distintos, com redes isoladas,
   volumes, domínios, credenciais e dados separados; staging nunca recebe
   credenciais/dados de produção. Essa separação é operacional, não uma fronteira

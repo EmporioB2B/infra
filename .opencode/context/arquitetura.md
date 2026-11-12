@@ -85,17 +85,36 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
   SSH forwarding local; não criar rota Tunnel/Access, DNS público ou ingress
   OCI para o painel.
 - Staging será protegido por Cloudflare Access; não será adicionado Nginx Basic
-  Auth na VPS. Os hostnames e o Tunnel ainda não foram criados. Proteger tanto
-  o hostname do Front quanto o da API do staging.
+  Auth na VPS. Hostnames aprovados: `staging.emporiob2b.com.br` para o Front e
+  `api-staging.emporiob2b.com.br` para a API. O bucket público R2 dedicado de
+  staging usará `media-staging.emporiob2b.com.br` como Custom Domain, fora do
+  Tunnel. Disponibilidade/configuração desses domínios, Tunnel, Access e
+  associação do Custom Domain R2 ainda não foram verificadas/configuradas;
+  Access protege Front/API, não o domínio público de mídia.
 - Stacks separados no mesmo Docker host são isolamento operacional, não
   isolamento forte: kernel, daemon e recursos físicos são compartilhados.
   Exigir segredos, banco, storage e dados de staging distintos; nunca permitir
   que staging use credenciais/dados de produção.
-- **Contrato de staging decidido:** PostgreSQL em container local enquanto
-  migrations/schema estão em construção; R2 e SMTP serão serviços reais de
-  teste/staging com credenciais próprias. Versão do Postgres, buckets/escopos e
-  hostnames são fechados na TASK-INFRA-019. Produção continua usando Supabase
-  externo e não terá Postgres container.
+- **Contrato de staging decidido (TASK-INFRA-019):** PostgreSQL 17 local em
+  container; bootstrap administrativo, migrador (`emporio_migrador`) e runtime
+  (`emporio_app`) separados; sem copiar dados de produção. Back e Radar terão
+  recursos/credenciais R2 dedicados de staging, não compartilhados entre si ou
+  com produção; Radar usa R2 real. SMTP real terá credenciais próprias,
+  STARTTLS+AUTH e remetente/destinatários controlados. Nomes reais dos buckets,
+  credenciais, sender e dados de conexão continuam a ser provisionados pelo
+  operador no Dokploy, nunca registrados aqui. Produção continua usando Supabase
+  externo e não terá Postgres container. Detalhes: `../../docs/staging-contract.md`.
+- **Existente — configuração staging do Front:** `apiBaseUrl` e `imageBaseUrl`
+  apontam aos URLs aprovados e `allowedHosts` inclui `staging.emporiob2b.com.br`
+  preservando `localhost` para o healthcheck
+  (`../Front_Angular/angular.json:36-38,80-90`). Isso não comprova build/
+  publicação ARM64 nem implantação. O contrato de build é API
+  `https://api-staging.emporiob2b.com.br`, mídia
+  `https://media-staging.emporiob2b.com.br` e Hosts permitidos
+  `staging.emporiob2b.com.br` e `localhost`. O `scripts/build.mjs` possui
+  perfil staging, mas o Dockerfile atual ainda executa `build:production`; a
+  imagem precisa selecionar o perfil staging. Build/publicação ARM64 e deploy
+  permanecem gates sob a governança dos repos donos.
 - A arquitetura pretendida continua sem Traefik de aplicação: o Dokploy traz o
   Traefik dele, mas o Tunnel roteará diretamente aos containers. O modo de
   isolamento de deployments do Dokploy permanece por avaliar antes de implantar
@@ -110,6 +129,18 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
   configurados; painel acessado por SSH forward. MFA/passkey foi adiado com
   exceção temporária aceita e é acompanhado pela TASK-INFRA-022. Evidências em
   `vps_oracle.md`.
+- **Existente — artefatos TASK-INFRA-020 no repo, não carregados no Dokploy nem implantados:**
+  `compose/docker-compose.staging.yml` e `env/.env.staging.example` definem o
+  projeto `emporio-staging`. `apps` é interna (front/api/cloudflared),
+  `radar-net` interna e só API↔Radar; `database` interna (postgres/bootstrap/
+  migrate/api). Redes `api-egress`, `radar-egress` e `tunnel-egress` são bridges
+  separadas, cada uma ligada apenas ao serviço que precisa sair. Nenhum serviço
+  publica porta. Volumes `emporio-staging_pgdata` (persistente) e
+  `emporio-staging_radar_state` são named volumes. Teto aprovado inicial por
+  stack: 1,5 CPU/3 GiB; limites long-lived no Compose somam 1,5 CPU/2.875 GiB
+  e jobs one-shot têm limites próprios. Não é sizing validado por carga.
+  O Dokploy File Mount `/bootstrap/roles.sql`, valores reais, imagens app ARM64,
+  Tunnel/Access/R2/SMTP e primeiro deploy continuam pendentes (TASK-INFRA-021).
 
 ## Desenvolvimento/integração (máquina local)
 

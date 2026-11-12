@@ -8,11 +8,20 @@ local com Vector, Loki, Prometheus e Grafana.
 Uma VPS Oracle Cloud em São Paulo foi provisionada para **staging primeiro**;
 a intenção é hospedar produção futuramente no mesmo host, com isolamento apenas
 lógico entre stacks. Dokploy `v0.31.0` está instalado; o projeto/serviço Compose
-de staging existe no painel, mas ainda sem YAML ou aplicações. Cloudflare
-Tunnel e Access ainda não foram configurados. Consulte
+de staging existe no painel. O repo contém o Compose e handoff de staging, mas
+eles ainda não foram carregados/configurados no Dokploy; não há aplicações
+implantadas. Cloudflare Tunnel e Access ainda não foram configurados. Consulte
 [`docs/oracle-vps.md`](docs/oracle-vps.md) e o contexto técnico em
 [`.opencode/context/vps_oracle.md`](.opencode/context/vps_oracle.md) antes de
 preparar o host.
+
+O contrato e artefatos de staging estão em
+[`docs/staging-contract.md`](docs/staging-contract.md),
+[`docs/staging-compose.md`](docs/staging-compose.md) e
+[`cloudflare/staging-ingress.md`](cloudflare/staging-ingress.md). A validação
+estática do Compose não significa que imagens, secrets, File Mount, DNS ou
+serviços externos estejam provisionados; os gates do primeiro deploy estão na
+TASK-INFRA-021.
 
 ## Subir o ambiente local
 

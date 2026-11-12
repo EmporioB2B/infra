@@ -13,6 +13,7 @@ contém ponteiros estáveis, não histórico de execução.
 | `decisoes.md` | decisões arquiteturais aprovadas e suas justificativas |
 | `estado_atual.md` | fotografia factual do que existe hoje |
 | `vps_oracle.md` | estado factual e segurança da VPS OCI em São Paulo |
+| `../../docs/staging-contract.md`, `../../docs/staging-compose.md` | contrato e operação do staging (artefatos no repo versus implantação) |
 
 ## Consultar conforme o escopo
 

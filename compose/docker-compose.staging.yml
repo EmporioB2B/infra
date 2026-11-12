@@ -1,0 +1,316 @@
+name: emporio-staging
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:?POSTGRES_IMAGE deve ser um digest PostgreSQL 17 aprovado}
+    pull_policy: always
+    environment:
+      POSTGRES_DB: emporio
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER:?POSTGRES_ADMIN_USER obrigatória}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?POSTGRES_ADMIN_PASSWORD obrigatória}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - database
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: &staging-logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 768M
+
+  db-bootstrap:
+    image: ${POSTGRES_IMAGE:?POSTGRES_IMAGE deve ser um digest PostgreSQL 17 aprovado}
+    pull_policy: always
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        test -n "$$PGPASSWORD" \
+          && test -n "$$EMPORIO_APP_DB_PASSWORD" \
+          && test -n "$$EMPORIO_MIGRATOR_DB_PASSWORD" \
+          && test "$$PGPASSWORD" != "$$EMPORIO_APP_DB_PASSWORD" \
+          && test "$$PGPASSWORD" != "$$EMPORIO_MIGRATOR_DB_PASSWORD" \
+          && test "$$EMPORIO_APP_DB_PASSWORD" != "$$EMPORIO_MIGRATOR_DB_PASSWORD"
+        psql -X -v ON_ERROR_STOP=1 -f /bootstrap/roles.sql
+        psql -X -v ON_ERROR_STOP=1 <<'SQL'
+        \getenv app_password EMPORIO_APP_DB_PASSWORD
+        \getenv migrator_password EMPORIO_MIGRATOR_DB_PASSWORD
+        ALTER ROLE emporio_app PASSWORD :'app_password';
+        ALTER ROLE emporio_migrador PASSWORD :'migrator_password';
+        SQL
+        echo "PostgreSQL staging roles bootstrap completed."
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: emporio
+      PGUSER: ${POSTGRES_ADMIN_USER:?POSTGRES_ADMIN_USER obrigatória}
+      PGPASSWORD: ${POSTGRES_ADMIN_PASSWORD:?POSTGRES_ADMIN_PASSWORD obrigatória}
+      EMPORIO_APP_DB_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD obrigatória para emporio_app}
+      EMPORIO_MIGRATOR_DB_PASSWORD: ${SPRING_FLYWAY_PASSWORD:?SPRING_FLYWAY_PASSWORD obrigatória para emporio_migrador}
+    networks:
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    logging: *staging-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 256M
+
+  migrate:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE precisa ser uma imagem Backend GHCR imutável}
+    pull_policy: always
+    command: ["migrate"]
+    environment:
+      SPRING_FLYWAY_URL: jdbc:postgresql://postgres:5432/emporio?currentSchema=public,identidade,catalogo,mercadoria,comercial,infraestrutura,venda,pedidos,financeiro,fiscal,relatorio
+      SPRING_FLYWAY_USER: emporio_migrador
+      SPRING_FLYWAY_PASSWORD: ${SPRING_FLYWAY_PASSWORD:?SPRING_FLYWAY_PASSWORD obrigatória}
+    networks:
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-bootstrap:
+        condition: service_completed_successfully
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    logging: *staging-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 512M
+
+  api:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE precisa ser uma imagem Backend GHCR imutável}
+    pull_policy: always
+    environment:
+      SPRING_PROFILES_ACTIVE: prod,container
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/emporio?currentSchema=identidade,catalogo,mercadoria,comercial,infraestrutura,venda,pedidos
+      SPRING_DATASOURCE_USERNAME: emporio_app
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD obrigatória}
+      SPRING_FLYWAY_ENABLED: "false"
+      SPRING_FLYWAY_URL: ""
+      SPRING_FLYWAY_USER: ""
+      SPRING_FLYWAY_PASSWORD: ""
+      POSTGRES_ADMIN_PASSWORD: ""
+      APP_JWT_SECRET: ${APP_JWT_SECRET:?APP_JWT_SECRET staging obrigatória}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:?APP_CORS_ALLOWED_ORIGINS obrigatória}
+      APP_PASSWORD_RESET_BASE_URL: ${APP_PASSWORD_RESET_BASE_URL:?APP_PASSWORD_RESET_BASE_URL staging obrigatória}
+      APP_AUTH_COOKIE_SECURE: "true"
+      RADAR_BASE_URL: http://radar:8000
+      MANAGEMENT_SERVER_ADDRESS: 127.0.0.1
+      APP_STORAGE_PROVIDER: R2
+      APP_STORAGE_ALLOW_INSECURE_HTTP: "false"
+      APP_STORAGE_READ_WRITE_R2_ENDPOINT: ${APP_STORAGE_READ_WRITE_R2_ENDPOINT:?endpoint R2 read-write do Back obrigatório}
+      APP_STORAGE_READ_WRITE_R2_ACCESS_KEY_ID: ${APP_STORAGE_READ_WRITE_R2_ACCESS_KEY_ID:?access key R2 read-write do Back obrigatória}
+      APP_STORAGE_READ_WRITE_R2_SECRET_ACCESS_KEY: ${APP_STORAGE_READ_WRITE_R2_SECRET_ACCESS_KEY:?secret key R2 read-write do Back obrigatória}
+      APP_STORAGE_READ_ONLY_R2_ENDPOINT: ${APP_STORAGE_READ_ONLY_R2_ENDPOINT:?endpoint R2 read-only do Back obrigatório}
+      APP_STORAGE_READ_ONLY_R2_ACCESS_KEY_ID: ${APP_STORAGE_READ_ONLY_R2_ACCESS_KEY_ID:?access key R2 read-only do Back obrigatória}
+      APP_STORAGE_READ_ONLY_R2_SECRET_ACCESS_KEY: ${APP_STORAGE_READ_ONLY_R2_SECRET_ACCESS_KEY:?secret key R2 read-only do Back obrigatória}
+      APP_STORAGE_READ_ONLY_QUARENTENA_R2_ENDPOINT: ${APP_STORAGE_READ_ONLY_QUARENTENA_R2_ENDPOINT:?endpoint R2 quarantine read-only do Back obrigatório}
+      APP_STORAGE_READ_ONLY_QUARENTENA_R2_ACCESS_KEY_ID: ${APP_STORAGE_READ_ONLY_QUARENTENA_R2_ACCESS_KEY_ID:?access key R2 quarantine read-only do Back obrigatória}
+      APP_STORAGE_READ_ONLY_QUARENTENA_R2_SECRET_ACCESS_KEY: ${APP_STORAGE_READ_ONLY_QUARENTENA_R2_SECRET_ACCESS_KEY:?secret key R2 quarantine read-only do Back obrigatória}
+      APP_STORAGE_R2_QUARENTENA_BUCKET: ${APP_STORAGE_R2_QUARENTENA_BUCKET:?bucket R2 quarantine staging obrigatório}
+      APP_STORAGE_R2_PRIVADO_BUCKET: ${APP_STORAGE_R2_PRIVADO_BUCKET:?bucket R2 privado staging obrigatório}
+      APP_STORAGE_R2_PUBLICO_BUCKET: ${APP_STORAGE_R2_PUBLICO_BUCKET:?bucket R2 público staging obrigatório}
+      APP_STORAGE_R2_QUARENTENA_PREFIX: ${APP_STORAGE_R2_QUARENTENA_PREFIX:-quarantine/}
+      APP_STORAGE_R2_PRIVADO_PREFIX: ${APP_STORAGE_R2_PRIVADO_PREFIX:-private/}
+      APP_STORAGE_R2_REGION: ${APP_STORAGE_R2_REGION:-auto}
+      APP_STORAGE_R2_PUBLICO_BASE_URL: https://media-staging.emporiob2b.com.br
+      APP_EMAIL_ENABLED: "true"
+      APP_EMAIL_HEALTH_ENABLED: "true"
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST de staging obrigatório}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:?SMTP_USERNAME de staging obrigatório}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?SMTP_PASSWORD de staging obrigatória}
+      APP_EMAIL_FROM: ${APP_EMAIL_FROM:?APP_EMAIL_FROM de staging obrigatório}
+      APP_EMAIL_REPLY_TO: ${APP_EMAIL_REPLY_TO:?APP_EMAIL_REPLY_TO de staging obrigatório}
+      APP_EMAIL_MEDIA_BASE_URL: https://media-staging.emporiob2b.com.br
+    networks:
+      - apps
+      - database
+      - radar-net
+      - api-egress
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      radar:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --show-error --max-time 2 http://$${MANAGEMENT_SERVER_ADDRESS}:8081/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 60s
+      retries: 12
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *staging-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 1G
+
+  radar:
+    image: ${RADAR_IMAGE:?RADAR_IMAGE precisa ser uma imagem Radar GHCR imutável}
+    pull_policy: always
+    environment:
+      ENVIRONMENT: staging
+      LOG_LEVEL: ${RADAR_LOG_LEVEL:-INFO}
+      PORT: "8000"
+      CLOUDFLARE_KEY_ID: ${CLOUDFLARE_KEY_ID:?credencial R2 de staging do Radar obrigatória}
+      CLOUDFLARE_SECRET_KEY: ${CLOUDFLARE_SECRET_KEY:?credencial R2 de staging do Radar obrigatória}
+      CLOUDFLARE_URL_ACCESS: ${CLOUDFLARE_URL_ACCESS:?endpoint R2 real do Radar obrigatório}
+      CLOUDFLARE_BUCKET_NAME: ${CLOUDFLARE_BUCKET_NAME:?bucket R2 dedicado do Radar obrigatório}
+      CLOUDFLARE_REGION: ${CLOUDFLARE_REGION:-auto}
+      CLOUDFLARE_CEP_OBJECT_KEY: ${CLOUDFLARE_CEP_OBJECT_KEY:-cep_uf/cep_uf.parquet}
+      CLOUDFLARE_CEP_MANIFEST_OBJECT_KEY: ${CLOUDFLARE_CEP_MANIFEST_OBJECT_KEY:-cep_uf/manifest.json}
+      CLOUDFLARE_ESTABELECIMENTOS_OBJECT_KEY: ${CLOUDFLARE_ESTABELECIMENTOS_OBJECT_KEY:-nucleo_rfb/estabelecimentos.parquet}
+      CLOUDFLARE_EMPRESAS_OBJECT_KEY: ${CLOUDFLARE_EMPRESAS_OBJECT_KEY:-nucleo_rfb/empresas.parquet}
+      CLOUDFLARE_SOCIOS_OBJECT_KEY: ${CLOUDFLARE_SOCIOS_OBJECT_KEY:-nucleo_rfb/socios.parquet}
+      CLOUDFLARE_NUCLEO_RFB_MANIFEST_OBJECT_KEY: ${CLOUDFLARE_NUCLEO_RFB_MANIFEST_OBJECT_KEY:-nucleo_rfb/manifest.json}
+      SQLITE_PATH: /var/lib/radar-middleware/state/radar.sqlite3
+      SQLITE_BUSY_TIMEOUT_MS: ${SQLITE_BUSY_TIMEOUT_MS:-5000}
+      SQLITE_WRITE_RETRY_ATTEMPTS: ${SQLITE_WRITE_RETRY_ATTEMPTS:-8}
+      SQLITE_WRITE_DEADLINE_SECONDS: ${SQLITE_WRITE_DEADLINE_SECONDS:-5}
+      SQLITE_WRITE_BACKOFF_SECONDS: ${SQLITE_WRITE_BACKOFF_SECONDS:-0.02}
+      SQLITE_WRITE_JITTER_SECONDS: ${SQLITE_WRITE_JITTER_SECONDS:-0.01}
+      VIACEP_BASE_URL: https://viacep.com.br/ws
+      VIACEP_TIMEOUT: ${VIACEP_TIMEOUT:-5}
+      VIACEP_MAX_RESPONSE_BYTES: ${VIACEP_MAX_RESPONSE_BYTES:-16384}
+    volumes:
+      - radar_state:/var/lib/radar-middleware/state
+    networks:
+      - radar-net
+      - radar-egress
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2).read()"]
+      interval: 10s
+      timeout: 5s
+      start_period: 180s
+      retries: 12
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *staging-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.40"
+          memory: 768M
+
+  front:
+    image: ${FRONT_IMAGE:?FRONT_IMAGE precisa ser uma imagem Front GHCR imutável}
+    pull_policy: always
+    environment:
+      PORT: "4000"
+    networks:
+      - apps
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:'+(process.env.PORT||4000)+'/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *staging-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+
+  cloudflared:
+    image: ${CLOUDFLARED_IMAGE:?CLOUDFLARED_IMAGE deve ser a imagem pinada por digest}
+    pull_policy: always
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --loglevel
+      - info
+      - --protocol
+      - auto
+      - run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARED_TUNNEL_TOKEN:?token do Tunnel de staging obrigatório}
+      TUNNEL_METRICS: 127.0.0.1:2000
+    networks:
+      - apps
+      - tunnel-egress
+    depends_on:
+      front:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "ready"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *staging-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 128M
+
+networks:
+  apps:
+    name: emporio-staging_apps
+    driver: bridge
+    internal: true
+  radar-net:
+    name: emporio-staging_radar-net
+    driver: bridge
+    internal: true
+  database:
+    name: emporio-staging_database
+    driver: bridge
+    internal: true
+  api-egress:
+    name: emporio-staging_api-egress
+    driver: bridge
+  radar-egress:
+    name: emporio-staging_radar-egress
+    driver: bridge
+  tunnel-egress:
+    name: emporio-staging_tunnel-egress
+    driver: bridge
+
+volumes:
+  pgdata:
+    name: emporio-staging_pgdata
+  radar_state:
+    name: emporio-staging_radar_state

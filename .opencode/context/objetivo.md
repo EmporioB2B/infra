@@ -16,10 +16,11 @@ fronteira forte de segurança; ver `vps_oracle.md` e `decisoes.md`.
   radar, postgres, RustFS (emulando R2, inclusive o bucket público de fotos),
   Mailpit (capturando SMTP) e observabilidade local (Vector, Loki, Prometheus
   e Grafana), na mesma topologia principal de redes da produção planejada.
-- Compose de staging (**planejado — próximo ambiente**): protegido por
+- Compose de staging (**existente — artefatos no repo; implantação planejada**): protegido por
   Cloudflare Access e separado de produção em stacks, redes, volumes, dados e
   credenciais; PostgreSQL local em container e integrações com R2/SMTP reais
-  de teste/staging, ainda sem configuração implantada.
+  de teste/staging, ainda sem configuração implantada. TASK-INFRA-020 criou
+  Compose, env example e runbooks; não foram carregados no Dokploy.
 - Compose de produção (**planejado — produção**): `cloudflared`, front, api e
   radar; sem banco em container (o PostgreSQL do Back é o Supabase externo),
   no mesmo host OCI de staging por decisão do operador.

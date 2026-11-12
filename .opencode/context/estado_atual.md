@@ -36,11 +36,20 @@ Fotografia factual vigente. Não é cronologia de tasks.
   MFA/passkey e aceitou exceção temporária. TASK-INFRA-018 foi arquivada com
   esta exceção; TASK-INFRA-022 acompanha o MFA. Não criar rota não-SSH ao painel
   enquanto ela estiver pendente.
-- **Contrato decidido para staging:** PostgreSQL container local enquanto
-  migrations estão em construção; R2 e SMTP reais de teste/staging. Versão do
-  Postgres, hostnames, buckets/escopos das credenciais seguem TASK-INFRA-019;
-  nenhum valor secreto registrado. **Planejado — staging:** PostgreSQL ainda
-  não foi criado; não há ambiente de aplicação implantado.
+- **Contrato decidido — TASK-INFRA-019:** PostgreSQL 17 local com roles
+  administrativas/migradora/runtime separadas; dados próprios, sem cópia de
+  produção; R2 dedicado por serviço (Back e Radar); SMTP real com credenciais
+  distintas da produção e STARTTLS+AUTH; hostnames aprovados
+  `staging.emporiob2b.com.br`, `api-staging.emporiob2b.com.br` e
+  `media-staging.emporiob2b.com.br` (Custom Domain do bucket público R2). Os
+  recursos reais, nomes de buckets e credenciais não foram provisionados/registrados.
+  **Existente — artefatos TASK-INFRA-020, não implantados:** Compose
+  `compose/docker-compose.staging.yml`, example de env, runbook e handoff
+  Cloudflare. **Planejado — staging:** Postgres e aplicações ainda não foram
+  implantados; YAML não foi configurado no Dokploy; DNS, Tunnel e Access também
+  não foram configurados. Imagens GHCR ARM64, File Mount do bootstrap e valores
+  reais permanecem gates de TASK-INFRA-021. Ver
+  [`../../docs/staging-contract.md`](../../docs/staging-contract.md).
 - **Plano aprovado — hosting:** staging primeiro; produção futura dividirá a
   mesma VPS por não haver outra máquina. Stacks, redes e segredos separados não
   formam uma fronteira forte de segurança. Cloudflare Access para staging foi
@@ -49,6 +58,10 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `linux/arm64`; workflows ainda inexistentes. A skill canônica CI/CD agora
   exige publicações multiarch `linux/amd64,linux/arm64`; resolver nos repos
   donos e validar no staging antes de deploy de aplicação.
+- **Front staging:** o repo dono já define as URLs de staging e `allowedHosts`,
+  mas o Dockerfile atual ainda executa `build:production`; seleção do perfil
+  staging na imagem e publicação ARM64 seguem gates sob TASK-INFRA-002/003. O
+  operador informa que a implementação está em andamento.
 - **Existente — dev:** compose de desenvolvimento em
   `compose/docker-compose.dev.yml`, definindo todos os serviços de longa duração,
   e jobs one-shot `db-bootstrap` e `migrate` para o contrato DB-08 Infra–Backend;
@@ -295,9 +308,11 @@ Fotografia factual vigente. Não é cronologia de tasks.
   (S3 local é rejeitado) e o ViaCEP como `https://viacep.com.br/ws`; não tem
   autenticação de entrada; estado em SQLite reconstruível.
 - Front compila `apiBaseUrl`/`imageBaseUrl` no bundle (produção atual:
-  vazios) e o SSR valida `Host` contra `allowedHosts` (hoje só `localhost`).
-  Ambos são bloqueadores de produção e viram task no repo Front
-  (TASK-INFRA-002 rastreia a dependência).
+  vazios). O SSR valida `Host` contra `allowedHosts`: a configuração staging
+  inclui `staging.emporiob2b.com.br` e preserva `localhost` para healthcheck
+  (`../Front_Angular/angular.json:36-38`). O build staging define as URLs
+  aprovadas da API e mídia (`../Front_Angular/angular.json:80-90`). Isso existe
+  no código, mas não comprova imagem ARM64 publicada nem deploy.
 - O proxy de dev do Front aponta para `http://backend:8080` — o serviço da
   api no compose dev deve se chamar `backend`.
 - Back com `APP_EMAIL_ENABLED=true` valida SMTP no boot: exige credenciais
@@ -338,8 +353,14 @@ Fotografia factual vigente. Não é cronologia de tasks.
   pin de imagem por sha no Dokploy. A integração de produção com Grafana Cloud
   Loki permanece planejada: o Dokploy configura o provider e instala
   `dokploy-vector`; nenhum Loki/Grafana entra no Compose da aplicação.
-- **Planejado — staging:** contrato do ambiente, Compose e primeiro deploy ainda
-  pendentes. O Dokploy está instalado, mas nenhum ambiente de aplicação está
+- **Existente — contrato e artefatos de staging:** contrato, Compose
+  `compose/docker-compose.staging.yml`, env example e runbooks existem no repo;
+  não foram carregados no Dokploy nem implantados. TASK-INFRA-021 continua
+  bloqueada por imagens ARM64, build/publicação do Front, File Mount do
+  `/bootstrap/roles.sql` e provisionamento de recursos/valores externos
+  (R2, SMTP, DNS, Tunnel e Access). PG17 e roles separadas, assim como URLs,
+  são o desenho aprovado; recursos externos ainda não foram provisionados.
+  O Dokploy está instalado, mas nenhum ambiente de aplicação está
   implantado; MFA do painel foi adiado com exceção aceita (TASK-INFRA-022), e
   imagens ARM64/pré-requisitos do Front também são gates.
   Produção na mesma máquina continua futura e requer revisão explícita de

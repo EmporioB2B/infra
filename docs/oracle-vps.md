@@ -11,7 +11,8 @@ público, OCIDs, chaves, tokens ou credenciais.
   máquina, a intenção aprovada é hospedar staging e produção no mesmo host.
 - Em 2026-11-11 a instância foi criada e o acesso SSH testado. Dokploy `v0.31.0`
   foi instalado; o projeto `Emporio Staging` e um serviço Compose foram criados
-  no painel, mas ainda não há YAML configurado nem aplicações implantadas.
+  no painel. O repo Infra contém `compose/docker-compose.staging.yml`, mas o
+  painel ainda não recebeu YAML/configuração e não há aplicações implantadas.
   Cloudflare Tunnel e Access ainda não foram configurados.
 - Staging e produção precisarão usar stacks, redes, volumes, domínios, dados e
   segredos distintos. Isso não é isolamento forte: o kernel, host e daemon Docker
@@ -87,10 +88,14 @@ Internet
   revisada do instalador define `/etc/dokploy` como 0750; o operador confirmou
   `stat` como `750 root:root`. UFW, Fail2ban, rotação de logs Docker, backup/snapshot do
   boot volume e recursos Cloudflare não foram configurados/verificados.
-- Staging terá PostgreSQL em container local enquanto migrations estão em
-  construção; R2 e SMTP serão reais de teste/staging. Versão do Postgres,
-  buckets/escopos de credenciais e hostnames seguem pendentes na TASK-INFRA-019;
-  valores secretos não são registrados.
+- Contrato da TASK-INFRA-019: PostgreSQL 17 local, fluxo administrativo/
+  migrador/runtime separado e sem dados copiados da produção; R2 de staging
+  dedicado por serviço; SMTP real com credencial distinta da produção e
+  STARTTLS+AUTH. Hostnames aprovados: `staging.emporiob2b.com.br`,
+  `api-staging.emporiob2b.com.br` e `media-staging.emporiob2b.com.br` (Custom
+  Domain do bucket público R2). Recursos externos e valores concretos ainda
+  não foram provisionados; nenhum segredo é registrado. Consulte
+  [`staging-contract.md`](staging-contract.md).
 
 ## Guardrails operacionais e próximos gates
 

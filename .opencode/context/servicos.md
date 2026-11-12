@@ -163,6 +163,24 @@ estão aposentados.
   **planejado — produção** usa Supabase externo PostgreSQL 17
   (`SPRING_DATASOURCE_URL` JDBC com SSL). Flyway gerencia as migrations; o
   owner dos objetos do novo modelo é `emporio_owner`.
+- **Contrato aprovado — staging:** PostgreSQL 17 local; fluxo `postgres →
+  db-bootstrap → migrate → api`, com credencial administrativa apenas no
+  bootstrap; `SPRING_FLYWAY_URL`/`SPRING_FLYWAY_USER` no job migrador e
+  `SPRING_FLYWAY_PASSWORD` no bootstrap (para definir a role) e migrador, nunca
+  API; `SPRING_DATASOURCE_PASSWORD` no bootstrap (para definir a role) e API
+  runtime como `emporio_app`. Não copiar dados de produção. O contrato R2/SMTP
+  por serviço e as gates ainda abertas estão em
+  [`../../docs/staging-contract.md`](../../docs/staging-contract.md).
+- **Existente — artefatos Compose de staging (TASK-INFRA-020, não carregados no Dokploy nem implantados):** PostgreSQL
+  `17-alpine` por digest, sem `ports:`; readiness `pg_isready`; named volume
+  `emporio-staging_pgdata`. `db-bootstrap` usa Postgres CLI + File Mount
+  `/bootstrap/roles.sql`; `migrate` usa imagem Backend `migrate`, ambos jobs
+  one-shot. API `prod,container`, porta 8080 sem publish e management 8081 em
+  `127.0.0.1` (health da imagem); Front SSR porta 4000 sem publish e healthcheck
+  Node em `localhost`; Radar API 8000 e metrics 8082 sem publish, health em
+  `/health/ready`. O fluxo depende do File Mount no Dokploy e imagens imutáveis
+  GHCR multiarch antes do deploy. Teto aprovado inicial: 1,5 CPU/3 GiB por
+  stack (limites long-lived somam 1,5 CPU/2.875 GiB; jobs têm limites próprios).
 - **Existente — Fase 2, Compose dev integrado:** a sequência é
   `postgres → db-bootstrap → migrate → backend`. `db-bootstrap` usa a
   credencial administrativa, monta `database/bootstrap/roles.sql` read-only e
@@ -312,14 +330,28 @@ estão aposentados.
 - Único env lido em runtime hoje: `PORT`. `apiBaseUrl` e `imageBaseUrl` são
   **compilados no bundle** (`src/environments/*.ts`; produção atual: vazios)
   — virar build-arg é pré-requisito de deploy (task no repo Front).
-- SSR valida o header `Host` contra `security.allowedHosts` do
-  `angular.json` (hoje `["localhost"]`) — incluir domínio público é
-  pré-requisito de deploy (task no repo Front).
+- SSR valida `Host` contra `security.allowedHosts`: staging inclui
+  `staging.emporiob2b.com.br` e preserva `localhost` para healthcheck
+  (`../Front_Angular/angular.json:36-38`).
 - Imagem dev: `Dockerfile-dev` (`ng serve` em 4200, hot-reload,
   `proxy.conf.json` → `http://backend:8080`); no Compose dev publica somente
   em `127.0.0.1:4200`.
 - Verificação canônica: `npm run lint`, `npm run typecheck`,
   `npm run test`, `npm run build`. Não há framework E2E ainda.
+- **Existente — configuração staging no Front:** build inputs
+  `apiBaseUrl=https://api-staging.emporiob2b.com.br`,
+  `imageBaseUrl=https://media-staging.emporiob2b.com.br`, SSR `allowedHosts`
+  incluindo `staging.emporiob2b.com.br` e preservando `localhost` para o
+  healthcheck da imagem (`../Front_Angular/angular.json:36-38,80-90`). A mídia será o Custom Domain do bucket
+  público R2 dedicado do Back, fora do Tunnel; a associação ainda não foi
+  provisionada. **Existente — Front atual:** `apiBaseUrl` e `imageBaseUrl` de
+  produção continuam vazios (`../Front_Angular/src/environments/environment.ts:9-15`;
+  `../Front_Angular/angular.json:44-49`). Staging possui configuração própria.
+  `scripts/build.mjs` possui perfil `staging`, mas o Dockerfile atual ainda
+  executa `npm run build:production`; o owner precisa concluir/validar a seleção
+  do perfil staging na imagem e publicar ARM64 antes do deploy
+  (`../Front_Angular/Dockerfile:17-32`, `../Front_Angular/scripts/build-config.mjs:22-45`).
+  Runtime override não existe.
 
 ## Emuladores (somente dev/integração)
 

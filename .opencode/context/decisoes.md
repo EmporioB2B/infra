@@ -11,15 +11,18 @@
 | Plataforma de deploy | **Dokploy v0.31.0** self-hosted na VPS OCI; staging primeiro e produção depois na mesma máquina, em projetos/stacks distintos; Compose deste repo na branch `main` | Não há segunda máquina disponível; Dokploy atende Compose, envs e registry. Instalado em 2026-11-11 |
 | Reverse proxy de aplicação | **Sem proxy próprio/sem Nginx Basic Auth**; o Traefik instalado pelo Dokploy não será o destino das rotas do Tunnel | TLS e proteção de staging ficam na Cloudflare; `cloudflared` aponta diretamente aos containers. O Dokploy mantém o Traefik interno dele |
 | Entrada pública | **Cloudflare Tunnel** (`cloudflared` container com token) | Nenhuma porta HTTP publicada na VPS; dispensa gestão de certificado local |
-| Proteção do staging | **Cloudflare Access**, aplicado na borda aos hostnames de front e API; ainda não configurado | Gate de identidade sem publicar porta de autenticação na VPS; preferência do operador em vez de senha Basic Auth no Nginx |
+| Proteção do staging | **Cloudflare Access**, aplicado aos hostnames `staging.emporiob2b.com.br` e `api-staging.emporiob2b.com.br`; ainda não configurado | Hostnames aprovados como contrato; disponibilidade e configuração de Access/Tunnel/DNS ainda não verificadas. Gate de identidade sem publicar porta de autenticação na VPS |
 | Staging + produção no mesmo host | **Decidido por restrição de recursos:** ambos na mesma VPS OCI; stacks/redes/volumes/segredos separados, sem dados/credenciais de produção no staging | Não constitui isolamento forte; comprometimento do host/Docker ou exaustão de recursos pode afetar os dois. Isolamento forte exigiria outra VM, indisponível agora |
 | Administração do host | Manter usuário OCI `ubuntu`, SSH por chave, sem senha e sem login SSH direto de root; nenhum usuário Linux adicional para separar os ambientes | Usuários Linux não criam, por si, isolamento de stacks; o Dokploy usa Docker/Swarm rootful e rootless não é substituto direto |
 | MFA do painel Dokploy | **Adiado temporariamente por decisão explícita do operador**; painel fica exclusivamente atrás de SSH forwarding até TASK-INFRA-022 | Exceção temporária aceita; não criar rota externa/Cloudflare para o painel antes de concluir MFA/passkey |
 | Arquitetura da VM | Oracle Cloud `VM.Standard.A1.Flex`, ARM64 (`aarch64`); imagens GHCR multiarch `linux/amd64,linux/arm64` antes de deploy | A1 é ARM; workflows ainda não existem; a skill `cicd-ghcr` agora exige as duas plataformas |
-| Banco do staging | PostgreSQL em container local enquanto schema/migrations estão em construção; versão a confirmar (alvo sugerido PG17) | Isola staging do Supabase produtivo; migrations evoluem sem tocar produção |
-| R2/SMTP do staging | R2 e SMTP reais de teste/staging, com credenciais válidas e escopo não produtivo | Testar integração real sem reutilizar segredos ou dados de produção |
+| Banco do staging | PostgreSQL 17 em container local; bootstrap administrativo, migrador e runtime separados; sem cópia de dados de produção | Isola staging do Supabase produtivo enquanto migrations evoluem; compatibilidade local PG17 tem prova isolada, mas Supabase gerenciado continua sem validação |
+| R2 do staging | Recursos dedicados de staging para Back e Radar, com credenciais separadas por serviço/finalidade e da produção; Radar usa R2 real | Evita compartilhamento de dados e credenciais entre ambientes/serviços; nomes e policies reais ainda serão provisionados pelo operador |
+| SMTP do staging | SMTP real de staging, com credenciais distintas da produção, STARTTLS+AUTH, remetente de teste e destinatários controlados | Permite validar email sem expor credenciais produtivas; provedor/conexão/remetente concretos ainda serão provisionados |
 | Branch/release flow | Sem branch longa `staging`: PR para `main`; merge publica SHA/digest multiarch e atualiza staging; produção depois promove os mesmos digests com aprovação | Evita drift entre branch e ambiente e preserva rastreabilidade |
 | Domínios | `emporiob2b.com.br`→front, `api.emporiob2b.com.br`→api, `media.emporiob2b.com.br`→bucket público R2 (custom domain, não passa pela VPS) | Desenho do operador; same-site preserva cookie `SameSite=Lax` |
+| Mídia de staging | `media-staging.emporiob2b.com.br` como Custom Domain do bucket público R2 dedicado de staging; não passa pelo Tunnel | Hostname aprovado; associação do domínio R2 e cache/WAF ainda não configurados; não reutilizar bucket/domínio produtivo |
+| Limites staging | Teto inicial por stack de 1,5 CPU e 3 GiB RAM; limites por serviço no Compose | Decisão do operador para reservar capacidade a produção futura na mesma VPS; ainda precisa ser validada no runtime ARM64 e revista se houver OOM/timeout |
 | Banco em produção | **Supabase externo PostgreSQL 17**; nenhum postgres em container prod | Decisão do operador; dev integrado emula com `postgres:16-alpine` |
 
 ## Imagens e CI/CD
@@ -37,7 +40,7 @@
 | Tema | Decisão | Justificativa |
 |---|---|---|
 | Back↔Radar | Rede Docker exclusiva `radar-net` (`internal: true`); Radar **sem portas publicadas** | Radar não tem auth serviço-a-serviço ainda (mTLS é task futura); isolamento estrutural reduz a zona de ataque |
-| Egress | Rede `egress` para saída externa (R2, ViaCEP, Supabase, SMTP) | Separa tráfego interno de saída |
+| Egress | Bridges de egress separadas para serviços que precisam de saída externa; staging usa `api-egress`, `radar-egress`, `tunnel-egress` em single-service, com `apps` interna | A saída a R2/ViaCEP, SMTP e Cloudflare não adiciona Front/Tunnel à rede de outro serviço; `radar-net` permanece exclusivamente API↔Radar |
 | Dev | Portas publicadas somente em `127.0.0.1` | Nada do stack local fica exposto na LAN |
 | Management do Back | Porta 8081 nunca roteada pelo túnel | Actuator só para diagnóstico interno |
 | Back↔Prometheus | Rede Docker dedicada `metrics-net` (`internal: true`), Backend em `10.254.20.10` e Prometheus em `10.254.20.20` | O scrape é uma comunicação técnica separada da API e da `radar-net`; não há publish de 8081 |
