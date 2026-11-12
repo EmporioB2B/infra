@@ -1,0 +1,114 @@
+name: publish roles bootstrap artifact
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - database/bootstrap/**
+      - scripts/smoke-db-roles.sh
+      - .github/workflows/publish-roles-bootstrap.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - database/bootstrap/**
+      - scripts/smoke-db-roles.sh
+      - .github/workflows/publish-roles-bootstrap.yml
+  workflow_dispatch:
+
+concurrency:
+  group: roles-bootstrap-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate canonical bootstrap
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Infra source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Smoke roles on PostgreSQL 16
+        run: bash scripts/smoke-db-roles.sh postgres:16-alpine
+
+      - name: Smoke roles on PostgreSQL 17
+        run: bash scripts/smoke-db-roles.sh postgres:17-alpine
+
+      - name: Verify artifact contains the canonical SQL byte-for-byte
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='emporio-roles-bootstrap:ci-check'
+          container_id=''
+          cleanup() {
+            if [[ -n "$container_id" ]]; then
+              docker rm "$container_id" >/dev/null 2>&1 || true
+            fi
+          }
+          trap cleanup EXIT
+
+          docker build \
+            --file database/bootstrap/Dockerfile \
+            --tag "$image" \
+            database/bootstrap
+          container_id="$(docker create "$image")"
+          docker cp "$container_id:/bootstrap/roles.sql" "$RUNNER_TEMP/roles.sql"
+          cmp --silent database/bootstrap/roles.sql "$RUNNER_TEMP/roles.sql"
+          printf '%s\n' 'Artifact SQL matches the canonical Infra file byte-for-byte.'
+
+  publish:
+    name: publish immutable-reference package
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout Infra source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR with the job token
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish the bootstrap package
+        id: publish
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./database/bootstrap
+          file: ./database/bootstrap/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/emporiob2b/infra-roles-bootstrap:sha-${{ github.sha }}
+          build-args: |
+            VCS_REF=${{ github.sha }}
+          provenance: false
+          sbom: false
+
+      - name: Record published package reference
+        env:
+          IMAGE: ghcr.io/emporiob2b/infra-roles-bootstrap
+          REVISION: ${{ github.sha }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          {
+            printf 'Image: %s:sha-%s\n\n' "$IMAGE" "$REVISION"
+            printf 'Digest-pinned reference: %s@%s\n' "$IMAGE" "$DIGEST"
+          } >> "$GITHUB_STEP_SUMMARY"

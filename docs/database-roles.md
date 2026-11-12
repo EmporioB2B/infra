@@ -18,6 +18,37 @@ antes dessa prova e de um plano para os objetos preexistentes.
 O arquivo usa metacomandos do `psql` (`\set`/`\gexec`); executá-lo pelo cliente
 `psql`, não colar seu conteúdo diretamente no SQL Editor do Supabase.
 
+## Distribuição do bootstrap para o CI do Backend
+
+`database/bootstrap/roles.sql` continua tendo uma única fonte versionada na
+Infra. O workflow `.github/workflows/publish-roles-bootstrap.yml` valida o
+script em PostgreSQL 16 e 17 e compara byte a byte o conteúdo extraído do
+artefato OCI com essa fonte antes de publicar.
+
+O pacote privado pretendido é
+`ghcr.io/emporiob2b/infra-roles-bootstrap:sha-<SHA completo da Infra>`; o
+workflow também reporta o digest. O pacote é um container de transporte, não
+deve ser iniciado como serviço. O CI consumidor deve fixar o digest e copiar
+`/bootstrap/roles.sql` para uma área temporária — não commitar uma cópia no
+Backend. Provenance/SBOM ficam desabilitados inicialmente; o pacote contém
+somente o SQL canônico e metadata do commit da Infra, e a referência de consumo
+é fixada pelo digest.
+
+Após a primeira publicação, o operador concede acesso `Read` ao repositório
+`Backend_Java` em GHCR → package → **Manage Actions access**. O workflow
+consumidor deverá autenticar com o `GITHUB_TOKEN` automático e `packages: read`,
+extrair o arquivo e definir `EMPORIO_INFRA_ROLES_BOOTSTRAP_PATH` antes de
+`./mvnw -B verify`. O workflow Back atual ainda não tem esses passos; sua
+implementação pertence ao repo Backend. Não há PAT nem secret manual de CI para
+esse acesso. A leitura do package em PRs, inclusive PR de fork usando token
+read-only, deve ser comprovada no GitHub antes de declarar o gate integrado.
+
+**Estado atual:** o publisher da Infra e a definição do artefato estão neste
+change set; o workflow Backend existe, mas não consome o artefato. O package
+ainda não foi publicado no GHCR nem foi concedido o acesso Actions do Backend.
+Não tratar a integração como operacional até execuções reais confirmarem
+publicação, digest, leitura pelo consumidor e `verify` com a variável definida.
+
 ## Prova local descartável
 
 Execute, sem precisar subir o Compose integrado:

@@ -311,34 +311,27 @@ volumes:
   bucket público R2, sem `media-gateway` na VPS. O equivalente está descrito
   em `docs/storage-r2-handoff.md`, sem aplicação no R2, Cloudflare ou Dokploy.
 
-## Cadeia CI/CD (planejado — workflows ainda inexistentes)
+## Cadeia CI/CD (publisher de roles existente; CI das aplicações ainda não verificada)
 
 ```text
-push em main (repo de aplicação)
-  └─> GitHub Actions do repo
+PR para main (repo de aplicação)
+  └─> GitHub Actions (existente no Backend; demais repos conforme contrato)
         job test    gate canônico do projeto
-                    (Back: ./mvnw -B verify | Front: lint+typecheck+test+build
-                     | Radar: uv sync + pytest + ruff)
-        job image   docker/build-push-action + cache GHA
-                    -> ghcr.io/emporiob2b/<repo>:<sha> e :latest
-                       (tag de deploy = SHA; :latest não seleciona release)
-        job migrate (futuro, Backend) conecta ao Supabase por JDBC direto
-                    -> aplica migrations da imagem SHA selecionada
-        job deploy  (posterior; planejado) curl na API do Dokploy
-                    -> somente após migrate verde; deploy da mesma SHA
+        push em main após gate verde
+          └─> publicar imagem multiarch linux/amd64 + linux/arm64 no GHCR
+              tag SHA completo; latest opcional, nunca seletor de deploy
+              (planejado; contrato em docs/cicd.md)
+  operador seleciona referências SHA completas e faz deploy manual no Dokploy
+  (planejado para staging; produção fora do contrato)
 ```
 
-- Cada projeto é um repositório independente, então a detecção de mudança é
-  nativa: o workflow roda apenas no repo que recebeu o push.
-- **Decisão do operador — planejado:** a seleção da imagem de produção será
-  por SHA, com rollback repinando a SHA anterior. A tag `:latest` ainda pode
-  ser publicada, mas não selecionará release/deploy. A criação dos workflows e
-  do Compose de produção que publiquem/consumam as tags SHA continua posterior;
-  nenhum desses artefatos existe ainda (ver `estado_atual.md`).
-- O repo Infra terá workflow próprio de validação (`docker compose config`,
-  hadolint, actionlint) e disparará a suíte de integração sob demanda
-  (planejado — nenhum `.github/workflows/` existe ainda em qualquer repo;
-  TASK-INFRA-003/005; ver `estado_atual.md`).
+- **Planejado — contrato de publicação das aplicações:** os três repos de aplicação publicam no GHCR privado após gate verde; cada publicação em `main` usa SHA completo e manifest multiarch. `latest` é dispensável e não seleciona deploy (`../../docs/cicd.md:10-19,31-35,62-76`).
+- **Existente — workflows versionados, execução não verificada:** Infra contém `.github/workflows/publish-roles-bootstrap.yml` (valida o SQL em PostgreSQL 16/17 e o artefato, publica em push/main após os gates); Backend contém `.github/workflows/backend-ci.yml`. A existência dos arquivos não comprova runs, package GHCR, permissões Manage Actions access ou publicação/leitura remota. `validate.yml` e `integration.yml` continuam planejados (`../../.github/workflows/publish-roles-bootstrap.yml:1-16,25-43,66-103`; `../../docs/cicd.md:8-14,82-110`).
+- **Existente — contrato do harness no Backend:** `EMPORIO_INFRA_ROLES_BOOTSTRAP_PATH` indica o caminho do SQL canônico externo lido pelos testes, com precedência sobre fallback allowlisted para a chave no `.env`; não contém o SQL e não substitui o bootstrap. O workflow Back deve disponibilizar o artefato e definir essa variável para `./mvnw -B verify`; essa integração remota ainda não foi verificada (`../Backend_Java/src/test/java/br/com/emporio/infrastructure/migration/InfrastructureRolesBootstrapSupport.java:21,30-42,45-69,71-109`; `../../docs/cicd.md:103-110`). A fonte SQL permanece Infra; migrations e runner Flyway permanecem Backend.
+- **Planejado — fluxo de contribuição:** branch → PR para `main` → CI verde → merge é o processo manual da equipe. **Existente — contrato documentado:** branch protection não bloqueia tecnicamente push direto nem merge sem checks no estado atual que o contrato descreve; isso não comprova configuração real no GitHub. CODEOWNERS e proteção de branch com checks obrigatórios ficam para quando houver segundo mantenedor com escrita e o plano/configuração permitir (`../../docs/cicd.md:23-35,91-100,175-179`; `../skills/cicd-ghcr/SKILL.md:42-49`).
+- **Planejado — staging:** o operador faz deploy manual no Dokploy selecionando referências SHA completas; Actions não chama API/webhook nem recebe segredos de deploy (`../../docs/cicd.md:13-19,103-110,115-139`).
+- **Fora do escopo do contrato:** produção, promoção, workflow de produção e migration no Supabase (`../../docs/cicd.md:18-19,135-150`). Não há job de migration/deploy no fluxo CI/CD vigente.
+- **Existente — estado observado:** há workflow publisher de roles na Infra e workflow de CI/publicação no Backend; ambos ainda carecem de evidência de execução remota nesta auditoria. Package GHCR de roles, Manage Actions access do Backend, consumo do artefato pelo workflow Back e publicação remota permanecem não verificados. Front, Radar e execução/deploy manual seguem sem comprovação nesta auditoria (`../../.github/workflows/publish-roles-bootstrap.yml:1-16`; `../Backend_Java/.github/workflows/backend-ci.yml:1-18`; `../../docs/cicd.md:8-14,91-110`).
 
 ## Estrutura do repositório
 

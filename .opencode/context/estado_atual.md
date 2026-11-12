@@ -54,10 +54,28 @@ Fotografia factual vigente. Não é cronologia de tasks.
   mesma VPS por não haver outra máquina. Stacks, redes e segredos separados não
   formam uma fronteira forte de segurança. Cloudflare Access para staging foi
   escolhido; Tunnel, Access e aplicações ainda não foram instalados/configurados.
-- **Gate de plataforma:** a VPS é ARM64. Imagens de app precisam de
-  `linux/arm64`; workflows ainda inexistentes. A skill canônica CI/CD agora
-  exige publicações multiarch `linux/amd64,linux/arm64`; resolver nos repos
-  donos e validar no staging antes de deploy de aplicação.
+- **Planejado — contrato CI/CD das aplicações:** `docs/cicd.md` determina gate de testes e
+  publicação GHCR multiarch `linux/amd64,linux/arm64` por SHA completo em
+  `main`; `latest` é opcional e não seleciona deploy. Deploy de staging é
+  manual no Dokploy pelo operador; Actions não faz deploy. Produção está fora
+  do contrato (`docs/cicd.md:8-19,23-35,62-76,115-129`).
+- **Existente — estado dos workflows:** Infra tem `.github/workflows/publish-roles-bootstrap.yml`
+  e Backend tem `.github/workflows/backend-ci.yml`; ambos estão versionados,
+  mas a execução remota ainda não foi comprovada nesta auditoria. Front e Radar
+  não têm workflow de CI/CD verificado. Package GHCR de roles, Manage Actions
+  access do Backend, consumo remoto do artefato pelo workflow Back, publicação
+  remota e deploy continuam não verificados
+  (`.github/workflows/publish-roles-bootstrap.yml:1-16,25-43,66-103`;
+  `../Backend_Java/.github/workflows/backend-ci.yml:1-18,44-53`;
+  `docs/cicd.md:8-14,91-110`).
+- **Existente — contrato do harness de roles:** no Backend, `EMPORIO_INFRA_ROLES_BOOTSTRAP_PATH`
+  é um caminho de arquivo lido pelo harness de testes; variável de processo tem
+  precedência e, ausente, o harness lê apenas essa chave exata do `.env`, sem
+  carregar outras chaves. O CI deve baixar/extrair o SQL Infra e fornecer esse
+  caminho antes de `./mvnw -B verify`; essa entrega pelo workflow Back ainda não
+  está verificada (`../Backend_Java/src/test/java/br/com/emporio/infrastructure/migration/InfrastructureRolesBootstrapSupport.java:21,30-42,45-109`;
+  `docs/cicd.md:103-110`). O SQL canônico e bootstrap de roles pertencem à Infra;
+  migrations e runner Flyway pertencem ao Backend.
 - **Front staging:** o repo dono já define as URLs de staging e `allowedHosts`,
   mas o Dockerfile atual ainda executa `build:production`; seleção do perfil
   staging na imagem e publicação ARM64 seguem gates sob TASK-INFRA-002/003. O
@@ -260,16 +278,17 @@ Fotografia factual vigente. Não é cronologia de tasks.
   R2, sem `media-gateway` na VPS. `docs/storage-r2-handoff.md` descreve a
   credencial dedicada, prefixo `quarantine/`, policy somente `s3:GetObject` e
   CORS `GET`/`HEAD`; não há aplicação no R2, Cloudflare ou Dokploy.
-- **Existente — decisão de release futura:** TASK-INFRA-003 especifica imagem
-  imutável identificada por SHA/digest, migration e deploy pela mesma
-  referência, com `:latest` apenas alias opcional; workflows ainda são
-  **planejados**. A task continua marcada futura e alinha com essa decisão
-  (`.opencode/tasks/futuras/TASK-INFRA-003-cicd-github-actions-ghcr.md:3,11-15,21-26,60-63`).
-- Ainda NÃO existem neste repo: `compose/docker-compose.e2e.yml` e
-  `docker-compose.prod.yml`, `env/.env.prod.example`, `cloudflare/`,
-  `scripts/e2e-run.sh`, `docs/deploy-dokploy.md`, `docs/rollback.md`,
-  `docs/cicd.md` nem `.github/workflows/` — a cargo das
-  TASK-INFRA-003/004/005.
+- **Planejado — publicação/staging:** publicação por SHA completo e deploy
+  manual no Dokploy, conforme contrato vigente. Não inclui migration via CI,
+  Supabase, nem deploy automático; produção permanece fora do escopo
+  (`docs/cicd.md:13-19,62-76,103-110,115-139`).
+- **Existente — documentação CI/CD:** `docs/cicd.md` documenta contrato, mas
+  não comprova runs, configuração de proteção de `main`, package GHCR,
+  permissões de leitura ou deploy. A existência dos workflows Infra/Backend
+  não equivale a publicação remota ou consumo integrado
+  (`.github/workflows/publish-roles-bootstrap.yml:1-16`;
+  `../Backend_Java/.github/workflows/backend-ci.yml:1-18`;
+  `docs/cicd.md:8-14,91-110,207-213`).
 - Dockerfiles de produção prontos e revisados nos 3 projetos principais
   (Back: temurin 25 + usuário não-root + healthcheck em 8081; Front: SSR
   node:22 porta 4000; Radar: python 3.12 slim porta 8000 sem portas
@@ -287,7 +306,9 @@ Fotografia factual vigente. Não é cronologia de tasks.
   código; healthcheck da api aponta porta/path errados). Aposentado pela
   TASK-INFRA-001; ainda presente no disco — remover ou manter é decisão
   final do operador.
-- Nenhum repo possui `.github/workflows` — não existe CI hoje.
+- **Existente — workflows:** há publisher de roles em Infra e workflow CI/publicação
+  no Backend; runs e publicação remota não foram verificados. Essa existência
+  não significa que o CI completo dos repositórios esteja operacional.
 
 ## Fatos dos serviços que afetam a infra
 

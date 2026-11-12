@@ -24,9 +24,16 @@ fronteira forte de segurança; ver `vps_oracle.md` e `decisoes.md`.
 - Compose de produção (**planejado — produção**): `cloudflared`, front, api e
   radar; sem banco em container (o PostgreSQL do Back é o Supabase externo),
   no mesmo host OCI de staging por decisão do operador.
-- CI/CD (**planejado — workflows deste repositório ainda não existentes**):
-  padrão de GitHub Actions por repositório de aplicação (testes, build de
-  imagem, push no GHCR e deploy via API do Dokploy).
+- CI/CD: **existente — workflow publisher Infra** de bootstrap de roles,
+  versionado mas ainda não executado/verificado remotamente; Backend também tem
+  workflow CI/publicação versionado, sem execução verificada nesta auditoria.
+  **Planejado — demais aplicações:** teste e publicação multiarch no GHCR; o
+  deploy de staging é manual pelo operador no Dokploy, sem chamada de Actions à
+  API/webhook. Package GHCR, permissões Manage Actions access, consumo do
+  artefato pelo Back e publicação remota permanecem não verificados. Produção
+  está fora do contrato (`../../.github/workflows/publish-roles-bootstrap.yml:1-16`;
+  `../Backend_Java/.github/workflows/backend-ci.yml:1-18`;
+  `../../docs/cicd.md:8-19,23-35,82-110`).
 - Borda Cloudflare (**planejada**): túnel para
   `emporiob2b.com.br` (front) e `api.emporiob2b.com.br` (api);
   o staging usará Cloudflare Access; `media.emporiob2b.com.br` resolve para o

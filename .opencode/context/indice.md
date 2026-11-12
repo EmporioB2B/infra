@@ -22,7 +22,7 @@ contém ponteiros estáveis, não histórico de execução.
 | Escrever ou revisar compose | `arquitetura.md`, `servicos.md`, skill `compose-infra` |
 | Observabilidade e logs | `arquitetura.md`, `servicos.md`, `decisoes.md`, `estado_atual.md`, `docs/observability.md`, skill `observability-logs` |
 | Cloudflare, domínios, túnel, media/R2 | `arquitetura.md`, skill `cloudflare-edge` |
-| CI/CD, imagens e GHCR | `arquitetura.md`, skill `cicd-ghcr` |
+| CI/CD, imagens e GHCR | `arquitetura.md`, `../../docs/cicd.md` (contrato de publicação/staging), skill `cicd-ghcr` |
 | Deploy, Dokploy e rollback | `decisoes.md`, skill `dokploy-deploy` |
 | VPS OCI, hardening do host e ambientes compartilhados | `vps_oracle.md`, `arquitetura.md`, skill `dokploy-deploy` |
 | Testes integrados e E2E | `estado_atual.md`, tasks em `../tasks/futuras/` |

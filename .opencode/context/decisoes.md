@@ -15,11 +15,11 @@
 | Staging + produção no mesmo host | **Decidido por restrição de recursos:** ambos na mesma VPS OCI; stacks/redes/volumes/segredos separados, sem dados/credenciais de produção no staging | Não constitui isolamento forte; comprometimento do host/Docker ou exaustão de recursos pode afetar os dois. Isolamento forte exigiria outra VM, indisponível agora |
 | Administração do host | Manter usuário OCI `ubuntu`, SSH por chave, sem senha e sem login SSH direto de root; nenhum usuário Linux adicional para separar os ambientes | Usuários Linux não criam, por si, isolamento de stacks; o Dokploy usa Docker/Swarm rootful e rootless não é substituto direto |
 | MFA do painel Dokploy | **Adiado temporariamente por decisão explícita do operador**; painel fica exclusivamente atrás de SSH forwarding até TASK-INFRA-022 | Exceção temporária aceita; não criar rota externa/Cloudflare para o painel antes de concluir MFA/passkey |
-| Arquitetura da VM | Oracle Cloud `VM.Standard.A1.Flex`, ARM64 (`aarch64`); imagens GHCR multiarch `linux/amd64,linux/arm64` antes de deploy | A1 é ARM; workflows ainda não existem; a skill `cicd-ghcr` agora exige as duas plataformas |
+| Arquitetura da VM | Oracle Cloud `VM.Standard.A1.Flex`, ARM64 (`aarch64`); imagens GHCR multiarch `linux/amd64,linux/arm64` antes de deploy | A1 é ARM; publisher Infra de roles e workflow Back estão versionados, mas publicação remota ainda não verificada; demais workflows precisam atender ambas plataformas |
 | Banco do staging | PostgreSQL 17 em container local; bootstrap administrativo, migrador e runtime separados; sem cópia de dados de produção | Isola staging do Supabase produtivo enquanto migrations evoluem; compatibilidade local PG17 tem prova isolada, mas Supabase gerenciado continua sem validação |
 | R2 do staging | Recursos dedicados de staging para Back e Radar, com credenciais separadas por serviço/finalidade e da produção; Radar usa R2 real | Evita compartilhamento de dados e credenciais entre ambientes/serviços; nomes e policies reais ainda serão provisionados pelo operador |
 | SMTP do staging | SMTP real de staging, com credenciais distintas da produção, STARTTLS+AUTH, remetente de teste e destinatários controlados | Permite validar email sem expor credenciais produtivas; provedor/conexão/remetente concretos ainda serão provisionados |
-| Branch/release flow | Sem branch longa `staging`: PR para `main`; merge publica SHA/digest multiarch e atualiza staging; produção depois promove os mesmos digests com aprovação | Evita drift entre branch e ambiente e preserva rastreabilidade |
+| Branch/release flow | **Planejado — staging:** PR para `main`; após gate verde, push em `main` publica imagem multiarch etiquetada pelo SHA completo; operador seleciona referências SHA e faz deploy manual no Dokploy. Actions não faz deploy. **Produção está fora do contrato atual.** | Evita drift e preserva rastreabilidade; publicação e deploy ainda não foram implementados/exercitados (`../../docs/cicd.md:10-19,23-35,62-76,115-129`) |
 | Domínios | `emporiob2b.com.br`→front, `api.emporiob2b.com.br`→api, `media.emporiob2b.com.br`→bucket público R2 (custom domain, não passa pela VPS) | Desenho do operador; same-site preserva cookie `SameSite=Lax` |
 | Mídia de staging | `media-staging.emporiob2b.com.br` como Custom Domain do bucket público R2 dedicado de staging; não passa pelo Tunnel | Hostname aprovado; associação do domínio R2 e cache/WAF ainda não configurados; não reutilizar bucket/domínio produtivo |
 | Limites staging | Teto inicial por stack de 1,5 CPU e 3 GiB RAM; limites por serviço no Compose | Decisão do operador para reservar capacidade a produção futura na mesma VPS; ainda precisa ser validada no runtime ARM64 e revista se houver OOM/timeout |
@@ -30,10 +30,11 @@
 | Tema | Decisão | Justificativa |
 |---|---|---|
 | Registry | **GHCR privado** (`ghcr.io/emporiob2b/*`); Dokploy autentica com PAT | Nativo do GitHub Actions (`GITHUB_TOKEN`), sem conta extra |
-| Detecção de mudança | Workflow **por repositório de aplicação** (push em `main`) | Cada projeto já é um repo independente; paths-filter desnecessário |
-| Tags e seleção de versão | Deploy de produção por referência imutável SHA/digest, decidido pelo operador; `:latest` pode continuar publicado somente como alias, mas não seleciona o deploy | Imagens precisam ser rastreáveis e rollback deve repinar a referência imutável; CI/CD que publique/consuma SHA/digest continua **planejado** (não há workflows nem compose prod existentes) |
-| Trigger de deploy | Job final do workflow chama a **API do Dokploy** (`DOKPLOY_API_KEY` em secret) | Redeploy puxa a imagem nova e recria só o container afetado |
-| Gate de testes | Comandos canônicos de cada repo rodam **antes** do build de imagem | Falhou o teste, não publica imagem |
+| Triggers | **Planejado — aplicações:** workflows em PRs e push em `main`; PR testa sem publicar, push repete o gate e publica após sucesso. **Existente — Infra publisher:** `publish-roles-bootstrap.yml` filtra alterações do bootstrap/smoke/workflow, valida PRs e publica após sucesso em push `main`; execução remota não verificada | Cada projeto é independente; o publisher Infra valida o SQL canônico. Contratos/fontes: `../../docs/cicd.md:23-35,82-110`; `../../.github/workflows/publish-roles-bootstrap.yml:1-16,25-43,66-74` |
+| Tags e seleção de versão | **Planejado — staging:** tag SHA completo é a referência operacional; `:latest` é dispensável e, se publicado, não seleciona deploy. Produção fora do contrato | Rastreabilidade; confirmar digest no preparo operacional. Contrato em `../../docs/cicd.md:62-76` |
+| Trigger de deploy | **Planejado — staging:** deploy manual pelo operador no painel Dokploy; Actions não chama API/webhook. Nenhum deploy de produção definido | Evita expor/automatizar o canal administrativo (`../../docs/cicd.md:13-19,103-110,115-129`) |
+| Gate e publicação | **Planejado — demais aplicações:** gate antes da publicação GHCR multiarch em push para `main`. **Existente — Infra roles:** workflow versionado valida PostgreSQL 16/17 e igualdade byte a byte do SQL extraído antes de publicar package multiarch; nenhuma execução, package remoto ou acesso do Backend foi verificado | Falha no gate bloqueia publicação; a existência do workflow não prova configuração/execução remota (`../../.github/workflows/publish-roles-bootstrap.yml:25-43,66-103`; `../../docs/cicd.md:82-110`) |
+| Proteção de `main` e revisão | **Planejado — processo manual:** trabalhar em branch, abrir PR, aguardar CI verde e então fazer merge. **Existente — contrato documentado:** não há enforcement técnico de branch protection no estado atual descrito; push direto/merge sem checks continuam tecnicamente possíveis, sem afirmar configuração real no GitHub. CODEOWNERS, revisão independente e proteção de branch com checks são **planejados para o futuro**, quando houver segundo mantenedor com escrita e o plano/configuração permitir | O contrato diferencia processo da equipe de controles técnicos; não pressupor revisão independente nem bloqueio de push direto (`../../docs/cicd.md:23-35,91-100,175-179`; `../skills/cicd-ghcr/SKILL.md:42-49`) |
 
 ## Redes e isolamento
 
@@ -93,13 +94,10 @@ Cloudflare, Dokploy, GitHub):
   duplicada.
 - **cloudflared pinado**: imagem do cloudflared com tag específica (não
   `:latest`) e `--no-autoupdate`; atualização é decisão de deploy.
-- **Tags de imagem**: o Production Hardening Guide do Dokploy recomenda
-  evitar `:latest` em produção. O operador decidiu que o deploy será
-  selecionado por referência imutável SHA/digest (rollback por repin); a
-  publicação adicional de `:latest` pode continuar somente como alias, nunca
-  seleciona o deploy. A automação CI/CD que publique e consuma essa referência
-  ainda é posterior/planejada. Não presumir deploy por `:latest` como decisão
-  vigente.
+- **Tags de imagem:** **planejado — staging:** a referência operacional é o
+  SHA completo, com digest conferido antes do deploy; `:latest` é dispensável e
+  nunca seleciona staging. Produção não está definida pelo contrato atual
+  (`../../docs/cicd.md:62-76,149-150`).
 - **AutoDeploy e arquivos do repo**: o Dokploy faz `git clone` a cada
   deploy e limpa o diretório — nenhum bind-mount de arquivo do repositório
   no compose prod; estado somente em named volumes (habilita Volume
