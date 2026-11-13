@@ -59,6 +59,29 @@ de dados do staging precisa ser definida antes do deploy.
 O Compose não impõe quota de disco ao named volume; monitoramento e limite de
 armazenamento no host/daemon são follow-up operacional, não foram configurados.
 
+### Criar o admin inicial (operação manual)
+
+A migration V1 cria a organização `Emporio B2B` (`PLATAFORMA`); ela não cria
+usuário admin. Depois que o staging estiver saudável e as migrations tiverem
+terminado, o operador pode executar `scripts/seed-admin-staging.sh
+--confirm-staging` em um host conectado ao daemon Docker que gerencia o staging.
+O script localiza exclusivamente o serviço Compose `postgres` cujo projeto
+seja `emporio-staging` ou tenha o sufixo gerado pelo Dokploy (por exemplo,
+`emporio-staging-elh12i`), verifica também o banco `emporio`, exige estado
+`healthy` e confirmação digitada `staging`.
+Ele solicita a senha do admin sem eco, gera BCrypt e executa o seed idempotente
+em transação usando a credencial administrativa disponível dentro do container.
+Ao executar novamente, a senha informada substitui a senha anterior; use uma
+senha exclusiva de staging, diferente da produção.
+
+O seed é deliberadamente manual e **não** é dependência de `db-bootstrap`,
+`migrate`, API ou deploy. Ele concede `ADMIN_NEGOCIO` no escopo `PLATAFORMA` e
+as nove capacidades administrativas do seed dev; isso equivale a um
+superusuário de staging. A senha em claro não é gravada nem impressa (somente o
+hash BCrypt é persistido no banco). A operação só
+altera o banco se a verificação explícita do alvo passar; não rode em produção.
+O e-mail inicial é `admin@emporiob2b.com.br`.
+
 O healthcheck do Front usa `http://localhost:4000/`; a allowlist SSR compilada
 na imagem precisa preservar `localhost` junto ao hostname público de staging.
 

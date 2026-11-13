@@ -43,11 +43,12 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `staging.emporiob2b.com.br`, `api-staging.emporiob2b.com.br` e
   `media-staging.emporiob2b.com.br` (Custom Domain do bucket público R2). Nomes
   reais de buckets e credenciais não foram provisionados/registrados.
-  **Existente — artefatos TASK-INFRA-020, não implantados:** Compose
+  **Existente — artefatos TASK-INFRA-020:** Compose
   `compose/docker-compose.staging.yml`, template
   `compose/prometheus/prometheus.staging.yml`, example de env, runbook e
-  handoff Cloudflare. **Planejado — staging:** Postgres e aplicações ainda não foram
-  implantados; YAML não foi configurado no Dokploy. **Existente — borda
+  handoff Cloudflare. **Relato do operador, não verificado nesta sessão —
+  staging funcional:** esta sessão não acessou VPS/staging nem confirmou deploy,
+  saúde ou funcionamento. **Existente — borda
    Cloudflare de staging (2026-11-13):** zona `emporiob2b.com.br` Active
   (NS `dora`/`gannon.ns.cloudflare.com`); túnel remotamente gerenciado
   `emporio-staging` (`87a7e326-bc1b-43fb-9091-212fa38e0fdb`) criado no
@@ -287,6 +288,26 @@ Fotografia factual vigente. Não é cronologia de tasks.
   preparação de produção (`scripts/seed-admin-dev.sh:46-49,92-94,204-250`,
   `Backend_Java/src/main/resources/application.yml:37-39`,
   `Backend_Java/src/main/resources/db/migration/V2__autenticacao_autorizacao.sql:16-60`).
+- **Existente — seed manual de admin do staging (artefato; execução não verificada nesta sessão):**
+  `scripts/seed-admin-staging.sh --confirm-staging` é uma operação separada do
+  bootstrap, migration, API e deploy; exige acesso ao daemon Docker que gerencia
+  o projeto Compose `emporio-staging` (ou o sufixo de projeto gerado pelo Dokploy),
+  encontra exatamente um container `postgres` em execução e saudável, e requer
+  confirmação digitada `staging`.
+  Solicita senha sem eco, gera BCrypt custo 12 e executa seed idempotente em
+  transação usando a credencial administrativa dentro do container. Cria/atualiza
+  `admin@emporiob2b.com.br`, ativa o vínculo e concede `ADMIN_NEGOCIO` com escopo
+  `PLATAFORMA` e nove capacidades administrativas. A migration V1 do Backend,
+  não o seed, cria a organização ativa `Emporio B2B` (`PLATAFORMA`). O resultado
+  equivale a superusuário de staging; não usar em produção. A senha em claro não
+  é gravada nem impressa (somente o hash BCrypt fica no banco); ao repetir a
+  execução, a senha informada é substituída. Não cria `perfil_usuario`
+  (`scripts/seed-admin-staging.sh:2-3,6-18,21-41,44-65,67-92,94-130,132-174,177-191`;
+  `../../docs/staging-compose.md:62-78`;
+  `../Backend_Java/src/main/resources/db/migration/V1__fundacao_clientes.sql:92-96`).
+  O operador informou que staging está funcional, mas esta sessão não acessou
+  VPS/staging nem executou o seed; funcionamento e resultado em runtime não
+  foram verificados independentemente.
 - **Existente — dev integrado / contrato DB-08:** `database/bootstrap/roles.sql` é o artefato Infra canônico para `psql`, sem senhas nem grants DML de domínio; o Compose o monta em `db-bootstrap` como read-only e injeta as senhas de serviço por ambiente. `db-bootstrap` verifica que as três credenciais tenham ao menos 32 caracteres, sejam somente alfanuméricas e distintas, sem imprimir valores. `migrate` chama `migrate` com `SPRING_FLYWAY_*`; `backend` usa `emporio_app`, `SPRING_DATASOURCE_PASSWORD` e `currentSchema` dos schemas de domínio, dependendo de sucesso do job. `env/.env.dev.example` nomeia as três variáveis. `scripts/up-dev.sh --no-build` completou os jobs e deixou os serviços healthy; o seed idempotente confirmou os registros do admin e `scripts/smoke.sh` passou os gates de API, métricas, isolamento, Front, RustFS, mídia e CORS. O histórico Flyway e `identidade.usuario` existem no PostgreSQL dev. Os volumes legados foram preservados (`database/bootstrap/roles.sql:3-5`; `compose/docker-compose.dev.yml:154-368`; `env/.env.dev.example:21-27`).
 - **Existente — preflight dev:** `scripts/up-dev.sh` identifica branch, SHA curto e dirty state do contexto Backend configurado; permite checkout de trabalho com aviso, enquanto apenas o clone `../Backend_Java` em `main` limpo é classificado canônico. Não lê `.env` do Backend (`scripts/up-dev.sh:18-28,50-79`).
 - **Planejado — produção:** validar bootstrap/roles e a sequência de migration em PostgreSQL 17 gerenciado/Supabase ainda é requisito antes de afirmar prontidão; testes em PostgreSQL descartável e Compose dev não demonstram essa prontidão (`../Backend_Java/docs/database/DB-08-13-contrato-infra-backend.md:283-285,357-360`).

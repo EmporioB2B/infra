@@ -182,7 +182,7 @@ estão aposentados.
   runtime como `emporio_app`. Não copiar dados de produção. O contrato R2/SMTP
   por serviço e as gates ainda abertas estão em
   [`../../docs/staging-contract.md`](../../docs/staging-contract.md).
-- **Existente — artefatos Compose de staging (TASK-INFRA-020, não carregados no Dokploy nem implantados):** PostgreSQL
+- **Existente — artefatos Compose de staging (TASK-INFRA-020; implantação não verificada nesta sessão):** PostgreSQL
   `17-alpine` por digest, sem `ports:`; readiness `pg_isready`; named volume
   `emporio-staging_pgdata`. `db-bootstrap` usa Postgres CLI + File Mount
   `/bootstrap/roles.sql`; `migrate` usa imagem Backend `migrate`, ambos jobs
@@ -217,6 +217,22 @@ estão aposentados.
   **existente, não implantado**; logs via `dokploy-vector` → Grafana Cloud Loki
   seguem **planejados** (ver `arquitetura.md`/`decisoes.md`;
   `compose/docker-compose.staging.yml:121,154-155,206-214,295-342`).
+- **Existente — seed manual de admin de staging (não executado/verificado nesta
+  sessão):** `scripts/seed-admin-staging.sh --confirm-staging` direciona
+  exclusivamente ao serviço `postgres` do projeto `emporio-staging` ou seu
+  sufixo de projeto gerado pelo Dokploy, valida o DB `emporio`, exige container
+  healthy e confirmação interativa, e é independente dos jobs
+  `db-bootstrap`/`migrate`, API e deploy. Após as migrations, cria/atualiza
+  `admin@emporiob2b.com.br` e concede `ADMIN_NEGOCIO` no escopo `PLATAFORMA`
+  com nove capacidades administrativas; a senha é solicitada sem eco, vira
+  BCrypt custo 12; somente o hash é persistido no banco. Reexecução substitui a
+  senha, e o seed não cria `perfil_usuario`. A V1 do Backend cria a organização `Emporio B2B` ativa do
+  tipo `PLATAFORMA`. Tratar a conta como superusuário: operação manual somente
+  em staging, nunca produção. O operador relata staging funcional, mas VPS,
+  staging e execução do seed não foram verificados nesta sessão
+  (`scripts/seed-admin-staging.sh:2-3,6-18,21-41,44-65,67-92,94-130,132-174,177-191`;
+  `../../docs/staging-compose.md:62-78`;
+  `../Backend_Java/src/main/resources/db/migration/V1__fundacao_clientes.sql:92-96`).
 - **Existente — Fase 2, Compose dev integrado:** a sequência é
   `postgres → db-bootstrap → migrate → backend`. `db-bootstrap` usa a
   credencial administrativa, monta `database/bootstrap/roles.sql` read-only e
