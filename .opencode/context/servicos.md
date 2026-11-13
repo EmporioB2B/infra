@@ -85,7 +85,8 @@ estão aposentados.
   `SPRING_DATASOURCE_PASSWORD`, `APP_JWT_SECRET`,
   `APP_CORS_ALLOWED_ORIGINS`, `RADAR_BASE_URL`,
   `MANAGEMENT_SERVER_ADDRESS`.
-  No profile `prod` soma-se `APP_PASSWORD_RESET_BASE_URL`.
+  No clone canônico `Backend_Java`, profile `prod` soma
+  `APP_PASSWORD_RESET_BASE_URL` (`application-prod.yml:9`).
 - Envs relevantes por escopo:
   - Radar: `RADAR_BASE_URL` (dev/prod: `http://radar:8000`),
     `RADAR_CONNECT_TIMEOUT`, `RADAR_READ_TIMEOUT`,
@@ -134,10 +135,23 @@ estão aposentados.
     path (`APP_STORAGE_R2_PUBLICO_BASE_URL=https://media.emporiob2b.com.br`),
     e não haverá media-gateway na VPS; `media.emporiob2b.com.br` será servido
     diretamente pelo bucket público R2.
-  - Email: `APP_EMAIL_ENABLED`, `APP_EMAIL_HEALTH_ENABLED`, `SMTP_HOST`,
+  - Email no clone canônico `../Backend_Java` usado pelo Compose dev:
+    `APP_EMAIL_ENABLED`, `APP_EMAIL_HEALTH_ENABLED`, `SMTP_HOST`,
     `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `APP_EMAIL_FROM`,
     `APP_EMAIL_REPLY_TO`, `APP_EMAIL_MEDIA_BASE_URL` (default prod:
-    `https://media.emporiob2b.com.br`). Com `APP_EMAIL_ENABLED=true`,
+    `https://media.emporiob2b.com.br`). **Não retirar ainda o nome legado no
+    Compose dev**: esse clone ainda o lê em
+    `Backend_Java/src/main/resources/application.yml:158`.
+    **Contrato implementado na cópia `../Backend_Java_Anuncios`, destinada à
+    próxima imagem de staging (publicação/deploy dessa cópia não verificados):**
+    a base dos templates de email é `APP_MEDIA_BASE_URL` (default em
+    `../Backend_Java_Anuncios/src/main/resources/application.yml:156-158`); o profile `prod` exige
+    `APP_PASSWORD_RESET_BASE_URL` e `CADASTRO_CONFIRMATION_BASE_URL`
+    (`../Backend_Java_Anuncios/src/main/resources/application-prod.yml:8-11`). O Compose staging injeta as três URLs e o
+    example as cobre (`compose/docker-compose.staging.yml:120-122`,
+    `env/.env.staging.example:23-25`). Não inferir que a mudança do clone de
+    staging já existe no clone canônico do dev.
+    Com `APP_EMAIL_ENABLED=true`,
     `EmailConfiguration.validateEnabledConfiguration` falha o boot sem
     `SMTP_USERNAME`/`SMTP_PASSWORD` não vazios e sem SMTP autenticado com
     STARTTLS obrigatório: as propriedades JavaMail são fixas no
@@ -148,6 +162,30 @@ estão aposentados.
     real — precisa suportar STARTTLS+AUTH; SMTP plano não funciona. Em
     dev isso é atendido pelo Mailpit com certificado autoassinado
     (SAN=`mailpit`) + truststore do JVM (ver `arquitetura.md`, seção dev).
+    - **Existente — logo estático de email:** caminho fixo
+      `/img/email/logo.png`, sem seleção por organização nem consulta a logo
+      no banco. No clone `Backend_Java_Anuncios`, a base é `APP_MEDIA_BASE_URL`;
+      no clone canônico `Backend_Java` (Compose dev), permanece
+      `APP_EMAIL_MEDIA_BASE_URL`. Fontes: os `application*.yml` citados acima
+      e os templates correspondentes nos dois clones. Isso
+      não significa ausência de logos de marcas no domínio: `marca.logo_arquivo_id`
+      existe para marcas (`../Backend_Java/src/main/resources/db/migration/V3__catalogo_taxonomia.sql:14-23`),
+      mas não é o logo estático dos emails. **Existente — ferramenta manual
+       staging-only:** `scripts/publish-email-logo-staging.sh` envia o PNG ao
+       bucket público de staging na chave `img/email/logo.png`, exigindo
+       credencial própria; o escopo bucket-write é requisito de provisionamento,
+       não verificado pelo script. O upload não altera/registra dados no DB
+       (`scripts/publish-email-logo-staging.sh:2-3,6-10,13-26,29-43,45-67`,
+       `env/.env.email-logo.staging.example:1-7`). O asset padrão é
+       `../Front_Angular/public/img/logo.png` (556×449 px; contrato também em
+       `docs/staging-compose.md:89-103`). O Compose configura
+       `APP_MEDIA_BASE_URL=https://media-staging.emporiob2b.com.br`
+       (`compose/docker-compose.staging.yml:120-122`), e o script publica e
+       tenta obter o asset nessa URL (`scripts/publish-email-logo-staging.sh:10-12,36-38,54-63`).
+       **Relato do operador, não verificado independentemente nesta sessão:**
+       o Custom Domain R2 de staging e o asset estão funcionais; isso não é
+       prova independente de configuração/asset nem de deploy da aplicação.
+       Este checkout não contém Compose de produção nem `env/.env.prod.example`.
   - URLs públicas do Front: `CADASTRO_CONFIRMATION_BASE_URL`,
     `APP_PASSWORD_RESET_BASE_URL` (prod: `https://emporiob2b.com.br`).
   - Auth/cookie: `APP_AUTH_COOKIE_SECURE` (o profile `container` já

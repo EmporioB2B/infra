@@ -99,9 +99,11 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
   públicos: DNS dos dois hostnames na borda Cloudflare (proxied) e Access
   interceptando ambos com 302 ao time domain `soft-salad-0948`; policy/IdP
   não auditados, primeiro login real pendente. SSL/TLS Full (strict)
-  reportado pelo operador, não verificado independentemente. Associação do
-  Custom Domain R2 pendente (`media-staging` não configurado; R2 não
-  provisionado). Access protege Front/API, não o domínio público de mídia.
+  reportado pelo operador, não verificado independentemente. **Relato do
+  operador, não verificado independentemente nesta sessão:** associação do
+  Custom Domain R2 `media-staging` e funcionamento público do asset do logo.
+  Não houve validação Cloudflare/R2/VPS nesta auditoria; o domínio permanece
+  fora do Tunnel. Access protege Front/API, não o domínio público de mídia.
 - Stacks separados no mesmo Docker host são isolamento operacional, não
   isolamento forte: kernel, daemon e recursos físicos são compartilhados.
   Exigir segredos, banco, storage e dados de staging distintos; nunca permitir

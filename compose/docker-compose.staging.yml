@@ -118,6 +118,8 @@ services:
       APP_JWT_SECRET: ${APP_JWT_SECRET:?APP_JWT_SECRET staging obrigatória}
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:?APP_CORS_ALLOWED_ORIGINS obrigatória}
       APP_PASSWORD_RESET_BASE_URL: ${APP_PASSWORD_RESET_BASE_URL:?APP_PASSWORD_RESET_BASE_URL staging obrigatória}
+      CADASTRO_CONFIRMATION_BASE_URL: ${CADASTRO_CONFIRMATION_BASE_URL:?CADASTRO_CONFIRMATION_BASE_URL staging obrigatória}
+      APP_MEDIA_BASE_URL: ${APP_MEDIA_BASE_URL:?APP_MEDIA_BASE_URL staging obrigatória}
       APP_AUTH_COOKIE_SECURE: "true"
       RADAR_BASE_URL: http://radar:8000
       RADAR_CONNECT_TIMEOUT: ${RADAR_CONNECT_TIMEOUT:-500ms}
@@ -149,7 +151,6 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:?SMTP_PASSWORD de staging obrigatória}
       APP_EMAIL_FROM: ${APP_EMAIL_FROM:?APP_EMAIL_FROM de staging obrigatório}
       APP_EMAIL_REPLY_TO: ${APP_EMAIL_REPLY_TO:?APP_EMAIL_REPLY_TO de staging obrigatório}
-      APP_EMAIL_MEDIA_BASE_URL: https://media-staging.emporiob2b.com.br
     networks:
       apps:
       database:

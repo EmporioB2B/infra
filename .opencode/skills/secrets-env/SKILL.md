@@ -55,6 +55,11 @@ Regras estruturais:
   usar `GITHUB_TOKEN`), credenciais do painel Dokploy (2FA/passkey);
 - chaves R2 do bucket **público** de media: o bucket é público por
   decisão; ainda assim a credencial de escrita dele é segredo do Back.
+- **Infra — publicação manual do logo de email em staging**: `EMAIL_LOGO_R2_ACCESS_KEY_ID`
+  e `EMAIL_LOGO_R2_SECRET_ACCESS_KEY` são credenciais operacionais dedicadas,
+  exclusivas para escrita no bucket público de staging via
+  `scripts/publish-email-logo-staging.sh`; não são entregues à API, não se
+  reutilizam credenciais do Back/Radar e nunca se usam em produção.
 
 ## Geração e qualidade
 
@@ -65,7 +70,8 @@ Regras estruturais:
 - escopo mínimo por credencial: PAT do Dokploy só `read:packages`; PAT de
   CI só o que o workflow usa; token do Dokploy API por integração e com
   expiração; token R2 do Radar restrito ao bucket privado (bucket-scoped
-  token quando disponível); tokens de API Cloudflare restritos à conta/zone
+  token quando disponível); token de upload do logo restrito a escrita no
+  bucket público de staging; tokens de API Cloudflare restritos à conta/zone
   necessária;
 - nunca reutilizar o mesmo segredo entre ambientes (dev ≠ teste ≠ prod) —
   o vazamento de dev não pode comprometer prod.

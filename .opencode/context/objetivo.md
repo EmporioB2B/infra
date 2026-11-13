@@ -45,7 +45,9 @@ fronteira forte de segurança; ver `vps_oracle.md` e `decisoes.md`.
   pela VPS. Staging (**existente na borda, 2026-11-13**) — túnel
   `emporio-staging` criado no dashboard, connector liga via compose/Dokploy
   no deploy; Cloudflare Access intercepta `staging`/`api-staging` (DNS e 302
-  verificados; primeiro login pendente); `media-staging` não configurado.
+  verificados; primeiro login pendente); associação do Custom Domain
+  `media-staging` e acesso do logo reportados pelo operador, sem validação
+  independente nesta sessão.
   Detalhes em `estado_atual.md` e `vps_oracle.md`.
 - Runbooks: smoke tests (**existente — dev**); deploy, rollback e gestão de
   segredos (**planejado — produção**).

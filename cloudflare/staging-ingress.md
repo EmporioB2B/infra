@@ -4,7 +4,9 @@ Tunnel, DNS e Access de staging aplicados no dashboard em 2026-11-13 (túnel
 `emporio-staging`; DNS proxied e interceptação Access verificados por `dig`/
 `curl` públicos — evidência em `.opencode/context/estado_atual.md`). O
 connector liga no deploy, via serviço `cloudflared` do Compose. R2 (buckets,
-credenciais e Custom Domain `media-staging`) ainda não foi provisionado.
+credenciais e Custom Domain `media-staging`) tem configuração reportada pelo
+operador; o acesso público ao logo de email também foi reportado como funcional,
+sem verificação independente nesta sessão.
 
 ## Tunnel remoto
 
@@ -26,11 +28,13 @@ deve receber ingress OCI HTTP/HTTPS; o Tunnel é outbound.
 
 ## Mídia pública R2
 
-Associar `media-staging.emporiob2b.com.br` como Custom Domain **ao bucket público
-R2 dedicado de staging do Back**, não ao Tunnel e nunca ao bucket de produção.
-Configurar `APP_STORAGE_R2_PUBLICO_BASE_URL` e `APP_EMAIL_MEDIA_BASE_URL` com
+`media-staging.emporiob2b.com.br` deve ser Custom Domain **do bucket público R2
+dedicado de staging do Back**, não do Tunnel e nunca do bucket de produção.
+Configurar `APP_STORAGE_R2_PUBLICO_BASE_URL` e `APP_MEDIA_BASE_URL` com
 `https://media-staging.emporiob2b.com.br`. Este hostname serve objetos públicos;
-não associá-lo ao bucket privado/quarentena.
+não associá-lo ao bucket privado/quarentena. O operador reportou que o objeto
+`img/email/logo.png` está acessível por esse domínio após a associação do Custom
+Domain; confirme novamente no próximo smoke de staging.
 
 Política de cache/WAF, regras de exposição e custom domain devem ser revisadas
 no dashboard antes de publicar fotos. Este handoff não provisiona recursos nem

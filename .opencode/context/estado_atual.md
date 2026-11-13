@@ -46,7 +46,27 @@ Fotografia factual vigente. Não é cronologia de tasks.
   **Existente — artefatos TASK-INFRA-020:** Compose
   `compose/docker-compose.staging.yml`, template
   `compose/prometheus/prometheus.staging.yml`, example de env, runbook e
-  handoff Cloudflare. **Relato do operador, não verificado nesta sessão —
+  handoff Cloudflare. **Existente — contrato de logo estático de email:**
+  há script manual staging-only e `env/.env.email-logo.staging.example` para
+  publicar o PNG no bucket público de staging; a referência é fixa em
+  `/img/email/logo.png`, não seleciona logo por organização e não altera DB
+  (`scripts/publish-email-logo-staging.sh:2-3,6-10,13-26,29-43,45-67`,
+  `docs/staging-compose.md:85-103`). **Existente — staging artefatos:** o
+  Compose usa `APP_MEDIA_BASE_URL` e exige também
+  `CADASTRO_CONFIRMATION_BASE_URL` e `APP_PASSWORD_RESET_BASE_URL`
+  (`compose/docker-compose.staging.yml:120-122`); o example cobre as três
+  (`env/.env.staging.example:23-25`). **Existente — código irmão:**
+  `Backend_Java_Anuncios` usa `APP_MEDIA_BASE_URL` e exige as URLs de
+  confirmação/reset no profile `prod`
+  (`../Backend_Java_Anuncios/src/main/resources/application.yml:158`,
+  `../Backend_Java_Anuncios/src/main/resources/application-prod.yml:8-11`). O clone canônico `Backend_Java` usado pelo
+  Compose dev ainda lê `APP_EMAIL_MEDIA_BASE_URL` e mantém defaults locais
+  (`src/main/resources/application.yml:93,113,158`; `application-prod.yml:9`);
+  não concluir que o nome legado pode ser removido do dev. **Relato do operador,
+  não verificado independentemente nesta sessão:** associação Custom Domain R2
+  `media-staging.emporiob2b.com.br` e asset do logo funcionais; não houve acesso
+  a Cloudflare/R2/VPS nem validação de deploy nesta auditoria.
+  **Relato do operador, não verificado nesta sessão —
   staging funcional:** esta sessão não acessou VPS/staging nem confirmou deploy,
   saúde ou funcionamento. **Existente — borda
    Cloudflare de staging (2026-11-13):** zona `emporiob2b.com.br` Active
@@ -64,7 +84,9 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `<tunnel-id>.cfargotunnel.com` no dashboard e SSL/TLS da zona em Full
   (strict). Policy/IdP do Access não auditados; o 302 prova interceptação,
   não login — primeiro login real pendente. `media-staging.emporiob2b.com.br`
-  não configurado (R2 não provisionado; fora do túnel). Imagens GHCR ARM64 e
+  tem associação Custom Domain R2 e logo público reportados pelo operador como
+  funcionais, sem verificação independente nesta sessão; fica fora do túnel.
+  Imagens GHCR ARM64 e
   perfil staging da imagem do Front verificados em 2026-11-13
   (`imagetools inspect` + `grep` na imagem publicada; referências no bullet
   de imagens abaixo); **Existente — wiring de File Mounts no artefato:** o
@@ -611,10 +633,12 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `api-staging` → `http://api:8080` reportadas pelo operador; DNS dos dois
   hostnames na borda Cloudflare e interceptação Access (302 ao time domain
   `soft-salad-0948`) verificados por `dig`/`curl`; policy/IdP não auditados,
-  primeiro login pendente; `media-staging` não configurado (R2 não
-  provisionado). Detalhes e evidência no bullet de artefatos TASK-INFRA-020
+  primeiro login pendente; associação do Custom Domain R2 `media-staging` e
+  asset do logo reportados como funcionais pelo operador, sem validação
+  independente nesta sessão. Detalhes e evidência no bullet de artefatos TASK-INFRA-020
   em "O que existe" e em `vps_oracle.md`. PG17 e roles separadas, assim como
-  URLs, são o desenho aprovado; buckets e credenciais não foram provisionados.
+  URLs são o desenho aprovado; buckets e credenciais Back/Radar/SMTP seguem
+  sem provisionamento independentemente confirmado nesta auditoria.
   O Dokploy está instalado, mas nenhum ambiente de aplicação está
   implantado; MFA do painel foi adiado com exceção aceita (TASK-INFRA-022).
   Produção na mesma máquina continua futura e requer revisão explícita de

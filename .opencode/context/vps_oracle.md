@@ -146,8 +146,9 @@ na console antes de qualquer operação. O runbook legível está em
   interceptação, não que o operador consegue logar — primeiro login real
   pendente. SSL/TLS da zona em Full (strict) é reportado pelo operador, não
   verificado independentemente (HTTPS funcionando sem loop é consistente).
-  `media-staging.emporiob2b.com.br` não configurado: R2 ainda não
-  provisionado; não passa pelo túnel. Nome/id do túnel e time domain são
+  **Relato do operador, não verificado independentemente nesta sessão:**
+  associação do Custom Domain R2 `media-staging.emporiob2b.com.br` e acesso
+  público do logo funcionais; o domínio não passa pelo túnel. Nome/id do túnel e time domain são
   fatos não secretos; tokens, cookies e o JWT meta das URLs de login não são
   registrados.
 - Dokploy está instalado; o painel permanece acessível pelo SSH forward local

@@ -3,7 +3,9 @@
 Este documento registra as decisões de configuração do staging. Não prova que
 DNS, Cloudflare, recursos R2, SMTP ou Dokploy tenham sido provisionados.
 Valores secretos são definidos por serviço no Dokploy; este repositório contém
-somente nomes de variáveis e placeholders.
+somente nomes de variáveis e placeholders. O operador informou que o Custom
+Domain R2 `media-staging.emporiob2b.com.br` e a leitura pública do logo de email
+estão funcionando; Infra não verificou esses recursos independentemente.
 
 ## Hostnames e acesso
 
@@ -47,8 +49,9 @@ dois hostnames; não criar rota para o painel Dokploy, Postgres, Radar ou actuat
   ou entre Back e Radar.
 - Hostname público de mídia aprovado: `media-staging.emporiob2b.com.br`, como
   Custom Domain do bucket público R2 dedicado do Back; não passa pelo Tunnel.
-  A associação do Custom Domain, políticas de cache/WAF e acessibilidade ainda
-  não foram configuradas. Não reutilizar o domínio/bucket de produção.
+  O operador reporta que o Custom Domain está associado e o logo é acessível;
+  políticas de cache/WAF seguem pendentes de verificação. Não reutilizar o
+  domínio/bucket de produção.
 
 ## SMTP
 
@@ -63,6 +66,12 @@ dois hostnames; não criar rota para o painel Dokploy, Postgres, Radar ou actuat
 
 - Configuração e segredos administrados por serviço no Dokploy, com escopos
   separados para Postgres/bootstrap, migrador, API/Back, Radar e Tunnel.
+- A API de staging recebe `APP_MEDIA_BASE_URL=https://media-staging.emporiob2b.com.br`
+  para assets de email; `CADASTRO_CONFIRMATION_BASE_URL` e
+  `APP_PASSWORD_RESET_BASE_URL` apontam para
+  `https://staging.emporiob2b.com.br`. O Compose exige as três variáveis e as
+  injeta no container `api`; os valores para o ambiente real vêm do Environment
+  do serviço Compose no Dokploy. O example serve somente para renderização local.
 - Somente nomes e placeholders são versionáveis; valores reais nunca entram no
   repo, task, logs ou documentação.
 - Responsabilidade de provisionamento: o operador cria/guarda os valores no
@@ -110,8 +119,10 @@ dois hostnames; não criar rota para o painel Dokploy, Postgres, Radar ou actuat
 - Provisionar buckets e credenciais não produtivas de R2 e SMTP no Dokploy.
 - Workflow de CI/publicação do Front no repo dono (a publicação manual atende
   o staging; o contrato de produção segue pendente em TASK-INFRA-002/003).
-- Configurar Custom Domain R2 `media-staging.emporiob2b.com.br` no bucket público
-  dedicado e confirmar políticas adequadas para conteúdo de teste.
+- Confirmar independentemente o Custom Domain R2 `media-staging.emporiob2b.com.br`,
+  TLS, acesso à imagem estática e políticas adequadas para conteúdo de teste;
+  o operador reporta esses itens como funcionais, mas esta verificação ainda
+  não foi registrada pela Infra.
 - Validar em runtime o teto aprovado de 2 CPU/12 GiB por stack (decisão do
   operador de 2026-11-13: divisão meio a meio da VPS entre staging e produção
   futura); o sizing é inicial e não houve teste de carga. Definir

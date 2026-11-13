@@ -2,8 +2,10 @@
 
 O stack versionado está em `compose/docker-compose.staging.yml`, com projeto
 Compose estável `emporio-staging`. O YAML é fonte de topologia, não evidência de
-deploy: não houve configuração no painel Dokploy, R2 ou SMTP. A borda
-Cloudflare (Tunnel/DNS/Access) foi configurada em 2026-11-13.
+deploy. O operador relata que o staging está funcional e que o Custom Domain
+R2 de mídia serve o logo; Infra não inspecionou Dokploy, R2 ou SMTP
+independentemente nesta revisão. A borda Cloudflare (Tunnel/DNS/Access) foi
+configurada em 2026-11-13.
 
 ## Dokploy e ambiente
 
@@ -81,6 +83,31 @@ superusuário de staging. A senha em claro não é gravada nem impressa (somente
 hash BCrypt é persistido no banco). A operação só
 altera o banco se a verificação explícita do alvo passar; não rode em produção.
 O e-mail inicial é `admin@emporiob2b.com.br`.
+
+### Logo estático dos emails
+
+O Backend referencia o logo por `APP_MEDIA_BASE_URL` + `/img/email/logo.png`;
+não consulta o banco para escolher o logo. Para staging,
+`scripts/publish-email-logo-staging.sh [caminho/logo.png]` publica o PNG no
+bucket público configurado e valida um GET pela URL
+`https://media-staging.emporiob2b.com.br/img/email/logo.png`. Por padrão, a
+origem é `../Front_Angular/public/img/logo.png`; passe outro caminho se o asset
+não estiver nesse clone. O script é somente staging, sobrescreve essa chave,
+não altera o banco e exige confirmação digitada `staging`.
+
+Antes de executar, instale AWS CLI v2 e carregue as variáveis de
+`env/.env.email-logo.staging.example` em `env/.env.email-logo.staging`, arquivo
+local ignorado (nunca preencha ou use o example como arquivo de credenciais).
+Rode o script como o usuário normal, sem `sudo`, após carregar o arquivo no
+shell. Esse arquivo contém somente configuração/credencial do uploader; a base
+`APP_MEDIA_BASE_URL` é configurada separadamente na API pelo Compose. O token `EMAIL_LOGO_R2_*`
+deve ser exclusivo e restrito à escrita no bucket público de staging; não
+reutilize credenciais do Radar ou de produção. O script não verifica a policy
+efetiva do token; confirme-a ao provisioná-lo no Cloudflare. O logo do Front
+mede 556×449 px;
+o template de email limita a largura a 180 px e define altura automática.
+Cloudflare pode manter o objeto em cache por até 5 minutos conforme o metadata
+enviado; regras de cache no domínio continuam sendo decisão separada.
 
 O healthcheck do Front usa `http://localhost:4000/`; a allowlist SSR compilada
 na imagem precisa preservar `localhost` junto ao hostname público de staging.
