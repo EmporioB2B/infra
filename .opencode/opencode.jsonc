@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [
+    { "action": "tool.use", "resource": "read:/etc", "effect": "deny" },
+    { "action": "tool.use", "resource": "read:/etc/*", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:/etc", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:/etc/*", "effect": "deny" },
+    { "action": "tool.use", "resource": "external_directory:/etc", "effect": "deny" },
+    { "action": "tool.use", "resource": "external_directory:/etc/*", "effect": "deny" },
+    { "action": "tool.use", "resource": "glob:/etc", "effect": "deny" },
+    { "action": "tool.use", "resource": "glob:/etc/*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:*/etc", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:*/etc/*", "effect": "deny" }
+  ]
+}

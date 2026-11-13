@@ -11,6 +11,17 @@ estão aposentados.
 
 - Repo: `EmporioB2B/Backend_Java`; imagem alvo:
   `ghcr.io/emporiob2b/backend-java`.
+- **Existente — imagem de staging publicada, verificada em 2026-11-13:**
+  `ghcr.io/emporiob2b/backend-java:10d03d7796b8a996c1580dcf56a3f95ea24c58dc`,
+  manifest multiarch `linux/amd64` + `linux/arm64`, index digest
+  `sha256:222d33f7c5bd5c1ebf3314b8441d62e6f61b1891594ca09c3cda1351f3c3ead4`
+  (`docker buildx imagetools inspect` executado pelo operador em máquina
+  autenticada no GHCR; saída colada nesta sessão). A tag SHA completo coincide
+  com o formato do workflow versionado
+  (`../Backend_Java/.github/workflows/backend-ci.yml:115-116`), evidenciando
+  execução do job de publicação; o run no Actions não foi auditado. Fato
+  verificado, não configuração: valores reais de imagem vão somente no
+  Dokploy.
 - Imagem: `eclipse-temurin:25-jre-jammy`, usuário `emporio` (10001),
   `EXPOSE 8080`; healthcheck da imagem usa o endereço injetado pelo profile
   `container`: `curl --fail http://${MANAGEMENT_SERVER_ADDRESS}:8081/actuator/health`.
@@ -175,12 +186,37 @@ estão aposentados.
   `17-alpine` por digest, sem `ports:`; readiness `pg_isready`; named volume
   `emporio-staging_pgdata`. `db-bootstrap` usa Postgres CLI + File Mount
   `/bootstrap/roles.sql`; `migrate` usa imagem Backend `migrate`, ambos jobs
-  one-shot. API `prod,container`, porta 8080 sem publish e management 8081 em
-  `127.0.0.1` (health da imagem); Front SSR porta 4000 sem publish e healthcheck
-  Node em `localhost`; Radar API 8000 e metrics 8082 sem publish, health em
-  `/health/ready`. O fluxo depende do File Mount no Dokploy e imagens imutáveis
-  GHCR multiarch antes do deploy. Teto aprovado inicial: 1,5 CPU/3 GiB por
-  stack (limites long-lived somam 1,5 CPU/2.875 GiB; jobs têm limites próprios).
+  one-shot. API `prod,container`, porta 8080 sem publish e management 8081 com
+  bind em `10.254.30.10` na `metrics-net` interna — não mais loopback (health
+  da imagem usa esse endereço); Front SSR porta 4000 sem publish e healthcheck
+  Node em `localhost`; Radar API 8000 sem publish, health em `/health/ready` e
+  metrics `10.254.31.30:8082` na `radar-metrics-net` interna. `prometheus`
+  (`${PROMETHEUS_IMAGE}` pinada por digest) sem publish, web em
+  `127.0.0.1:9090` dentro do container, healthcheck `wget /-/ready`, retenção
+  7d com WAL comprimido no volume `emporio-staging_prometheus-data`, limites
+  0.25 CPU/512M; entrypoint valida envs e interpola URL/username no template
+  via `sed`, token lido de `password_file` (File Mount), nunca por shell; não é
+  dependência de saúde de nenhum serviço. O fluxo depende dos File Mounts no
+  Dokploy (`roles.sql`, template do Prometheus, token remote_write) e imagens
+  imutáveis GHCR multiarch antes do deploy. File Mount wiring **existente no
+  artefato**: `../files/roles.sql` → `/bootstrap/roles.sql`,
+  `../files/prometheus.template.yml` →
+  `/etc/prometheus/prometheus.template.yml` e
+  `../files/remote-write-token` → `/etc/prometheus/remote-write-token`, todos
+  read-only. Dokploy File Mounts são armazenados sob `../files/` e só entram no
+  container por referência explícita no `volumes:`; o cadastro por si só não
+  conecta o arquivo. Os nomes efetivos/File Paths do painel e a presença dos
+  arquivos nos containers não foram confirmados; render local não é validação
+  de implantação (`compose/docker-compose.staging.yml:63-65,322-325`,
+  `../../docs/staging-compose.md:32-51`). Teto aprovado: 2 CPU/12 GiB por
+  stack (decisão do operador de 2026-11-13, divisão meio a meio da VPS entre
+  staging e produção futura; substitui o teto inicial de 1,5 CPU/3 GiB). Os
+  limites long-lived somam 1,75 CPU/3.375 GiB (incluindo o Prometheus) —
+  dentro do teto, válido para o primeiro deploy — e jobs têm limites próprios.
+  Métricas de staging (Prometheus com `remote_write` no Compose) são artefato
+  **existente, não implantado**; logs via `dokploy-vector` → Grafana Cloud Loki
+  seguem **planejados** (ver `arquitetura.md`/`decisoes.md`;
+  `compose/docker-compose.staging.yml:121,154-155,206-214,295-342`).
 - **Existente — Fase 2, Compose dev integrado:** a sequência é
   `postgres → db-bootstrap → migrate → backend`. `db-bootstrap` usa a
   credencial administrativa, monta `database/bootstrap/roles.sql` read-only e
@@ -279,6 +315,11 @@ estão aposentados.
   resolvido pelo mapa de referência (fontes no irmão:
   `src/radar_middleware/infrastructure/observability/prometheus.py:77-80,124-165,240-248`,
   `src/radar_middleware/infrastructure/config.py:201-207`).
+- **Existente — staging, artefato não implantado:** o Compose de staging
+  configura `METRICS_BIND_ADDRESS=10.254.31.30` e `METRICS_PORT=8082`; o
+  listener fica somente na `radar-metrics-net` interna (`10.254.31.0/24`,
+  Prometheus em `10.254.31.20`), sem publicação no host
+  (`compose/docker-compose.staging.yml:206-207,213-214,374-381`).
 - Envs reais (Pydantic settings, `env_prefix=""`, case-sensitive):
   `ENVIRONMENT`, `LOG_LEVEL`, `PORT`,
   `METRICS_BIND_ADDRESS`, `METRICS_PORT`,
@@ -308,6 +349,24 @@ estão aposentados.
   interna exclusiva. Verificação canônica:
   `uv run pytest tests/unit tests/contract tests/integration -q`,
   `uv run ruff check .`, `uv run ruff format --check .`.
+- **Existente — CI versionado; publicação verificada, run não auditado:**
+  `.github/workflows/ci.yml` tem job verify (pytest + ruff check/format) e job
+  publish em push de `main`, publicando
+  `ghcr.io/emporiob2b/radar-middleware:sha-<github.sha>` com
+  `platforms: linux/amd64,linux/arm64` e actions pinadas por SHA.
+  **Verificado em 2026-11-13** (`docker buildx imagetools inspect` executado
+  pelo operador em máquina autenticada no GHCR; saída colada nesta sessão):
+  `ghcr.io/emporiob2b/radar-middleware:sha-00208110c84de630ae0ef6b432c3988bd41e0ed4`
+  publicado com manifest multiarch `linux/amd64` + `linux/arm64`, index digest
+  `sha256:340395eef841bd8c96b22dd2e02672c8d8af55cc761517f0ac2419f25e4f3478`;
+  o index inclui ainda 2 attestation-manifests `unknown/unknown` (proveniência
+  buildx — normal, não são plataformas executáveis). A tag coincide com o
+  formato do workflow, evidenciando execução do job de publicação; o run no
+  Actions não foi auditado. O formato de
+  tag `sha-<SHA>` difere do `<sha-completo>` previsto para imagens de aplicação
+  em `docs/cicd.md:67-74`; a referência `RADAR_IMAGE` do staging precisa
+  refletir a tag realmente publicada
+  (`Radar_Middleware_Python/.github/workflows/ci.yml:18-59,77-85`).
 - **Pendência de visualização:** o Radar ainda não entrega catálogo de
   coordenadas para `codigo_cidade`. Existe um mapa de referência de municípios
   com códigos e nomes RFB/IBGE, mas ele não contém latitude/longitude; o Grafana
@@ -328,10 +387,13 @@ estão aposentados.
   **4000** (`PORT`), `CMD node dist/Emporio_Front/server/server.mjs`;
   healthcheck da imagem usa fetch do Node em `localhost`.
 - Único env lido em runtime hoje: `PORT`. `apiBaseUrl` e `imageBaseUrl` são
-  **compilados no bundle** (`src/environments/*.ts`; produção atual: vazios)
-  — virar build-arg é pré-requisito de deploy (task no repo Front).
-- SSR valida `Host` contra `security.allowedHosts`: staging inclui
-  `staging.emporiob2b.com.br` e preserva `localhost` para healthcheck
+  **compilados no bundle** (`src/environments/*.ts`; produção atual: vazios);
+  o Dockerfile aceita `ARG BUILD_PROFILE=production`, `ARG API_BASE_URL` e
+  `ARG IMAGE_BASE_URL` e executa `npm run build -- "$BUILD_PROFILE"`
+  (`../Front_Angular/Dockerfile:17-19,33-35`). Runtime override não existe.
+- SSR valida `Host` contra `security.allowedHosts` definido nas options do
+  target de build — `localhost` + `staging.emporiob2b.com.br`, valendo para
+  qualquer perfil; `localhost` preserva o healthcheck da imagem
   (`../Front_Angular/angular.json:36-38`).
 - Imagem dev: `Dockerfile-dev` (`ng serve` em 4200, hot-reload,
   `proxy.conf.json` → `http://backend:8080`); no Compose dev publica somente
@@ -340,17 +402,44 @@ estão aposentados.
   `npm run test`, `npm run build`. Não há framework E2E ainda.
 - **Existente — configuração staging no Front:** build inputs
   `apiBaseUrl=https://api-staging.emporiob2b.com.br`,
-  `imageBaseUrl=https://media-staging.emporiob2b.com.br`, SSR `allowedHosts`
+  `imageBaseUrl=https://media-staging.emporiob2b.com.br`
+  (`../Front_Angular/build.env.example:1-2`,
+  `../Front_Angular/scripts/build-config.mjs:1-4,26-34`), SSR `allowedHosts`
   incluindo `staging.emporiob2b.com.br` e preservando `localhost` para o
-  healthcheck da imagem (`../Front_Angular/angular.json:36-38,80-90`). A mídia será o Custom Domain do bucket
+  healthcheck da imagem (`../Front_Angular/angular.json:36-38`). A mídia será o Custom Domain do bucket
   público R2 dedicado do Back, fora do Tunnel; a associação ainda não foi
   provisionada. **Existente — Front atual:** `apiBaseUrl` e `imageBaseUrl` de
   produção continuam vazios (`../Front_Angular/src/environments/environment.ts:9-15`;
-  `../Front_Angular/angular.json:44-49`). Staging possui configuração própria.
-  `scripts/build.mjs` possui perfil `staging`, mas o Dockerfile atual ainda
-  executa `npm run build:production`; o owner precisa concluir/validar a seleção
-  do perfil staging na imagem e publicar ARM64 antes do deploy
-  (`../Front_Angular/Dockerfile:17-32`, `../Front_Angular/scripts/build-config.mjs:22-45`).
+  `../Front_Angular/angular.json:44-49`). Staging possui configuração própria
+  (`fileReplacements` para `environment.staging.ts`,
+  `../Front_Angular/angular.json:78-85`). O Dockerfile é parametrizado
+  (`ARG BUILD_PROFILE=production`, `ARG API_BASE_URL`, `ARG IMAGE_BASE_URL`;
+  `npm run build -- "$BUILD_PROFILE"`). **Existente — imagem publicada,
+  verificada em 2026-11-13:**
+  `ghcr.io/emporiob2b/front-angular:32614c57fc8089e12de4406b51e485d5caf7c08a`,
+  manifest multiarch `linux/amd64` + `linux/arm64`, index digest
+  `sha256:e140c9ff322d59d1e59610cdec5c3c93da18d38f4eea07c4dccc066c4b710d53`
+  (`docker buildx imagetools inspect` executado pelo operador em máquina
+  autenticada no GHCR; saída colada nesta sessão). Publicação manual — o
+  Front não tem workflow de CI/publicação. **Perfil staging — verificado em
+  2026-11-13:** o operador executou
+  `docker run --rm --entrypoint sh ghcr.io/emporiob2b/front-angular:32614c57fc8089e12de4406b51e485d5caf7c08a -c "grep -rl 'api-staging.emporiob2b.com.br' dist | head -3"`;
+  o pull resolveu para o mesmo index digest
+  `sha256:e140c9ff322d59d1e59610cdec5c3c93da18d38f4eea07c4dccc066c4b710d53`
+  e o grep retornou `dist/Emporio_Front/browser/chunk-CbtmA7w5.js` e
+  `dist/Emporio_Front/server/chunk-KNXTD5V5.mjs` — a URL
+  `https://api-staging.emporiob2b.com.br` está compilada nos bundles browser e
+  SSR da imagem publicada. Fonte: `environment.ts` e `environment.staging.ts`
+  diferem apenas no rótulo `environment` ('production' vs 'staging') e leem os
+  mesmos defines `__API_BASE_URL__`/`__IMAGE_BASE_URL__`
+  (`../Front_Angular/src/environments/environment.ts:12-14`;
+  `../Front_Angular/src/environments/environment.staging.ts:6-8`); o Dockerfile
+  defaulta `BUILD_PROFILE=production`, e `build-config.mjs` usa as URLs de
+  staging como default no perfil staging, exigindo ambas não vazias
+  (`../Front_Angular/Dockerfile:19,33-35`;
+  `../Front_Angular/scripts/build-config.mjs:1-4,26-41`). O rótulo é cosmético;
+  a prova substantiva são as URLs de staging compiladas nos dois bundles.
+  Comprovar run/deploy segue gate.
   Runtime override não existe.
 
 ## Emuladores (somente dev/integração)
@@ -455,10 +544,66 @@ O Radar **existente — dev** não é emulado: usa o R2 de teste real (restriç�
   `Backend_Java/src/main/resources/logback-spring.xml:7-42`). O contrato ECS é
   verificado diretamente para o Backend; não é uma afirmação de formato dos
   demais serviços sem fonte correspondente.
-- **Planejado — produção:** o Dokploy instala `dokploy-vector` ao associar a
-  VPS a um provider Grafana Loki em `Settings → Logs & Metrics`; endpoint,
-  tenant/usuário e token são segredos do painel/Secrets Provider. Loki/Grafana
-  não entram no Compose da aplicação no MVP.
+- **Existente — destino Grafana Cloud (2026-11-13, operador):** conta/stack
+  `smallmarzipan1294`, região `prod-sa-east-1` (São Paulo), free tier; Access
+  Policies `emporio-staging-logs` (`logs:write`) e `emporio-staging-metrics`
+  (`metrics:write`) criadas, geração dos tokens não confirmada. Endpoints
+  públicos de ingestão verificados por `curl` (HTTP 401 sem auth): Loki
+  `https://logs-prod-024.grafana.net` (tenant/user `1878826`) e remote_write
+  `https://prometheus-prod-40-prod-sa-east-1.grafana.net/api/prom/push`
+  (instance/user `3766316`). URLs e IDs não são segredos (IDs são usuários de
+  basic auth) e estão no `env/.env.staging.example:74-86`; somente os tokens
+  são segredos do painel/File Mount. As URLs internas
+  `*-local-nlb.internal.grafana.net` dos datasources provisionados na UI não
+  servem para ingestão externa.
+- **Planejado — implantação staging/produção:** o Dokploy instala
+  `dokploy-vector` ao associar a VPS a um provider Grafana Loki em
+  `Settings → Logs & Metrics` (URL Loki + tenant `1878826` + token
+  `logs:write`); o provider ainda não foi configurado. Loki/Grafana não entram
+  no Compose da aplicação. Logs de staging: stdout → driver `json-file` com
+  rotação (buffer local; proposital para o agente do Dokploy, não `fluentd`
+  como no dev) → `dokploy-vector` → push HTTPS outbound, sem porta inbound
+  (`compose/docker-compose.staging.yml:24-28`,
+  `../../docs/observability.md:161-185,192-197`).
+- **Existente — staging, artefato implementado, não implantado (direção
+  aprovada em 2026-11-13):** o serviço `prometheus` do Compose de staging usa
+  `${PROMETHEUS_IMAGE}` (example:
+  `prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996`,
+  digest verificado no Docker Hub), sem porta publicada, web em
+  `127.0.0.1:9090` dentro do container, healthcheck `wget /-/ready`, retenção
+  de 7 dias com WAL comprimido no volume `emporio-staging_prometheus-data` e
+  limites 0.25 CPU/512M. O entrypoint `sh` exige
+  `PROMETHEUS_REMOTE_WRITE_URL` (HTTPS) e `PROMETHEUS_REMOTE_WRITE_USERNAME`,
+  interpola os placeholders `__REMOTE_WRITE_URL__`/`__REMOTE_WRITE_USERNAME__`
+  via `sed` no template montado em `/etc/prometheus/prometheus.template.yml`
+  e executa o coletor; o token de escrita (`metrics:write`) é lido de
+  `password_file` no File Mount `/etc/prometheus/remote-write-token`, nunca
+  por shell. Redes internas `metrics-net` (`10.254.30.0/24`) e
+  `radar-metrics-net` (`10.254.31.0/24`), distintas das do dev, e bridge
+  `prometheus-egress` exclusiva para o remote_write.
+  `MANAGEMENT_SERVER_ADDRESS` da API é `10.254.30.10` (bind na `metrics-net`,
+  não mais loopback); o Radar usa `METRICS_BIND_ADDRESS=10.254.31.30`/
+  `METRICS_PORT=8082`. O template `compose/prometheus/prometheus.staging.yml`
+  não contém segredos: `external_labels`
+  `environment=staging`/`cluster=emporio-staging`, scrape da API em
+  `10.254.30.10:8081/actuator/prometheus` e do Radar em
+  `10.254.31.30:8082/metrics`, labels `environment`/`service`. O Prometheus
+  não é dependência de saúde de nenhum serviço. O example contém os valores
+  verificados (não secretos) de `PROMETHEUS_REMOTE_WRITE_URL/USERNAME` do
+  destino Grafana Cloud `smallmarzipan1294`; o token `metrics:write` vai
+  somente no File Mount e não tem geração confirmada. Validação local:
+  `config --quiet` exit 0 com o example vigente, entrypoint na imagem real
+  com valores fictícios + `promtool check config` SUCCESS; deploy na VPS,
+  ingestão real no Grafana Cloud e
+  scrape em runtime não provados — pendentes do primeiro deploy/smoke.
+  Dashboards do dev importados no Grafana Cloud seguem pendentes de operação.
+  Ressalva: tetos de 2 CPU/12 GiB por stack não reservam folga de sistema se
+  ambos os stacks estourarem simultaneamente — monitorar a folga real do host
+  antes da produção entrar
+  (`compose/docker-compose.staging.yml:121,154-155,206-214,295-342,366-392`,
+  `compose/prometheus/prometheus.staging.yml:14-44`,
+  `env/.env.staging.example:12,25,74-86`,
+  `../../docs/staging-compose.md:51-104`).
 
 ## Hermes_Robo_Whats_Python
 

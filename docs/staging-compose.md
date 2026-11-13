@@ -2,7 +2,8 @@
 
 O stack versionado está em `compose/docker-compose.staging.yml`, com projeto
 Compose estável `emporio-staging`. O YAML é fonte de topologia, não evidência de
-deploy: não houve configuração no painel Dokploy, Cloudflare, R2 ou SMTP.
+deploy: não houve configuração no painel Dokploy, R2 ou SMTP. A borda
+Cloudflare (Tunnel/DNS/Access) foi configurada em 2026-11-13.
 
 ## Dokploy e ambiente
 
@@ -18,10 +19,13 @@ deploy: não houve configuração no painel Dokploy, Cloudflare, R2 ou SMTP.
 - As imagens `backend-java`, `front-angular` e `radar-middleware` precisam ser
   referências SHA imutáveis no GHCR, com manifest `linux/amd64,linux/arm64`.
   `__SET_STAGING_SHA__` no example é placeholder, não tag publicável/deployável.
-  TASK-INFRA-003 e o build da imagem Front com perfil staging são gates antes do
-  primeiro deploy. O Dockerfile atual ainda chama `build:production`; a
-  configuração `staging` do Angular precisa ser selecionada pela imagem do repo
-  dono antes de promover o Front para o GHCR.
+  Publicação multiarch das três imagens e perfil staging do Front verificados
+  em 2026-11-13 (tags, digests e evidência em
+  `.opencode/context/estado_atual.md`). Gates remanescentes antes do primeiro
+  deploy: File Mount, valores reais por serviço e deploy/smoke (a borda
+  Cloudflare já está configurada). O Front segue sem workflow de CI (publicação
+  manual); isso é pendência do contrato de produção (TASK-INFRA-002/003), não
+  do staging.
 
 ## Bootstrap PostgreSQL
 
@@ -29,11 +33,25 @@ deploy: não houve configuração no painel Dokploy, Cloudflare, R2 ou SMTP.
 Flyway da imagem Back; a API só inicia depois de migração bem-sucedida. Como o
 Dokploy limpa/recria o checkout em deploy, não bind-montar arquivo do clone.
 Antes do deploy, cadastrar em **Advanced → Mounts → File Mounts** do serviço
-Compose um arquivo com conteúdo atual de
-`database/bootstrap/roles.sql`, destino exato `/bootstrap/roles.sql`, somente
-leitura se o painel oferecer essa opção. O job falhará fechado se o arquivo não
-estiver presente. Em atualizações futuras, sincronizar/revisar o File Mount com
-o SQL canônico antes do redeploy; este change set não opera o painel.
+Compose os três arquivos abaixo. Cadastrar um File Mount no Dokploy, por si só,
+não o monta dentro do container: o Compose os referencia explicitamente em
+`../files/`.
+
+| File Path no Dokploy / nome em `../files/` | Mount Path no Dokploy / destino no container | Conteúdo |
+|---|---|---|
+| `roles-bootstrap.sql` | `/bootstrap/roles.sql` | `database/bootstrap/roles.sql` |
+| `prometheus.template.yml` | `/etc/prometheus/prometheus.template.yml` | `compose/prometheus/prometheus.staging.yml` |
+| `remote-write-token` | `/etc/prometheus/remote-write-token` | somente token `metrics:write` |
+
+No formulário File Mount do Dokploy, **File Path é somente o nome do arquivo**
+(sem `/` inicial); **Mount Path é o caminho completo no container, incluindo o
+nome do arquivo**. O Dokploy guarda o arquivo em `../files/<File Path>`; para
+Compose, o YAML precisa ligar essa origem ao destino usando `volumes:`. Exemplo
+do bootstrap: `../files/roles-bootstrap.sql:/bootstrap/roles.sql:ro`. Use nomes
+de File Path que correspondam exatamente às fontes declaradas no Compose. O bootstrap/Prometheus falham se os arquivos
+necessários não existirem ou forem diretórios. Em atualizações futuras,
+sincronizar os conteúdos versionados antes do redeploy; nunca registrar o token
+no repo.
 
 O volume `emporio-staging_pgdata` é persistente e não deve ser removido por
 `down -v` ou operação equivalente. A política operacional de backup e retenção
@@ -44,28 +62,86 @@ armazenamento no host/daemon são follow-up operacional, não foram configurados
 O healthcheck do Front usa `http://localhost:4000/`; a allowlist SSR compilada
 na imagem precisa preservar `localhost` junto ao hostname público de staging.
 
+## Métricas — Prometheus → Grafana Cloud
+
+O staging envia métricas ao Grafana Cloud por `remote_write` (decisão do
+operador de 2026-11-13: estrear completo, testando em staging o desenho de
+produção). Logs seguem o caminho separado do `dokploy-vector` no host
+(`docs/observability.md`); Loki/Grafana não entram no Compose.
+
+- Imagem `prom/prometheus:v3.5.0` pinada por digest no example; retenção local
+  de 7 dias com WAL comprimido no volume `emporio-staging_prometheus-data`;
+  UI somente em `127.0.0.1:9090` dentro do container.
+- O entrypoint interpola **somente** URL e instance ID do remote_write
+  (Environment do Dokploy: `PROMETHEUS_REMOTE_WRITE_URL`,
+  `PROMETHEUS_REMOTE_WRITE_USERNAME`) no template, via `sed` com delimitador
+  `|`; exige HTTPS e falha fechado sem os valores. O **token nunca passa por
+  shell**: é lido de `password_file`.
+- File Mounts adicionais no Dokploy (Advanced → Mounts → File Mounts), com os
+  campos File Path/Mount Path listados na tabela Bootstrap PostgreSQL acima:
+  `prometheus.template.yml`
+  recebe o conteúdo de `compose/prometheus/prometheus.staging.yml` (sem
+  segredos); `remote-write-token` recebe somente o token da Access Policy do
+  Grafana Cloud com escopo `metrics:write`. O Compose monta ambos em
+  `/etc/prometheus/` como read-only. Sincronizar o template com o repo antes de
+  redeploy que o altere; token real somente no painel.
+- Alvos de scrape: API `10.254.30.10:8081/actuator/prometheus` e Radar
+  `10.254.31.30:8082/metrics`, com labels `environment=staging` e `service`;
+  `external_labels` `environment=staging`, `cluster=emporio-staging`.
+- O Prometheus não é dependência de saúde de nenhum serviço da aplicação
+  (sem `depends_on` apontando para ele).
+- Validação local deste change set: `docker compose config --quiet` exit 0;
+  entrypoint executado na imagem real com valores fictícios + `promtool check
+  config` SUCCESS, sem placeholders residuais. A prova de ingestão no Grafana
+  Cloud acontece no smoke pós-deploy.
+
 ## Redes e exposição
 
 - `apps` é interna: Front ↔ API ↔ cloudflared. Apenas API tem rede interna
   `radar-net` em comum com o Radar.
 - `database` é interna e sem portas publicadas: Postgres, jobs DB e API.
-- `api-egress`, `radar-egress` e `tunnel-egress` são bridges separadas, cada uma
-  ligada somente ao serviço que precisa de saída externa. Isso evita que o
-  Tunnel ou o Front compartilhem a rede de egress do Radar.
-- Nenhum serviço declara `ports:`. Actuator 8081 fica no loopback do container
-  da API; Postgres 5432 não é publicado; Radar 8000/8082 não é publicado.
-- `radar-net` e `database` com `internal: true` não são promessa de firewall
-  contra o host Docker; o Compose só garante ausência de publish e isolamento
-  entre containers fora dessas redes.
+- `metrics-net` é interna (subnet `10.254.30.0/24`): somente API (management
+  em `10.254.30.10`) e Prometheus (`10.254.30.20`). `radar-metrics-net` é
+  interna e separada (subnet `10.254.31.0/24`): somente Radar (métricas em
+  `10.254.31.30:8082`) e Prometheus (`10.254.31.20`) — a separação preserva o
+  isolamento negativo Radar → Backend:8081, como no dev.
+- `api-egress`, `radar-egress`, `tunnel-egress` e `prometheus-egress` são
+  bridges separadas, cada uma ligada somente ao serviço que precisa de saída
+  externa. Isso evita que o Tunnel ou o Front compartilhem a rede de egress do
+  Radar, e dá ao Prometheus saída própria para o remote_write.
+- Nenhum serviço declara `ports:`. Actuator 8081 faz bind no IP da
+  `metrics-net` dentro do container da API, sem publicação; Postgres 5432 não
+  é publicado; Radar 8000 não é publicado e o listener de métricas 8082 fica
+  somente na `radar-metrics-net`. A UI do Prometheus escuta em
+  `127.0.0.1:9090` dentro do próprio container (healthcheck).
+- `radar-net`, `database`, `metrics-net` e `radar-metrics-net` com
+  `internal: true` não são promessa de firewall contra o host Docker; o
+  Compose só garante ausência de publish e isolamento entre containers fora
+  dessas redes.
+- O healthcheck do Radar usa `/health/ready` (não apenas liveness), pois API
+  e Front dependem do cache CEP íntegro. A sondagem pode executar verificação
+  SQLite de conjunto completo; no staging mediu 5,1 s. Por isso, o Compose
+  concede até 12 s ao cliente Python, 15 s ao healthcheck Docker e repete a
+  cada 30 s, evitando falso `unhealthy` pelo timeout anterior de 2 s.
+- O healthcheck da API consulta `/actuator/health`; o Compose habilita o
+  contributor de saúde do SMTP e o transporte tem timeouts de até 5 s.
+  A sondagem concede até 10 s ao `curl`, 12 s ao healthcheck Docker e repete
+  a cada 30 s para não expirar antes do orçamento configurado do SMTP nem
+  abrir conexões SMTP excessivas a cada 10 s.
 
 ## Limites de recursos aprovados
 
-O operador aprovou teto inicial agregado **por stack** de 1,5 CPU e 3 GiB de
-RAM, para preservar espaço para produção futura na VPS de 4 OCPUs/24 GB. Os
-limites do Compose somam no máximo 1,5 CPU e 2.875 GiB nos serviços long-lived;
-os jobs bootstrap/migration rodam antes da API e também têm limites próprios.
-Isso é um teto inicial, não sizing validado por carga; TASK-INFRA-021 deve
-confirmar health/boot/smoke em ARM64 e pedir revisão se houver OOM ou timeout.
+Decisão do operador (2026-11-13): a VPS de 4 OCPUs/24 GB será dividida meio a
+meio entre staging e produção futura — teto de **2 CPU e 12 GiB por stack**,
+substituindo o teto inicial de 1,5 CPU/3 GiB. O motivo original (não estrangular
+a produção) permanece; o tráfego inicial previsto é baixo.
+Os limites atuais do Compose somam no máximo 1,75 CPU e 3.375 GiB nos serviços
+long-lived (incluindo o Prometheus de métricas); os jobs bootstrap/migration
+rodam antes da API e também têm limites próprios. Limites são tetos, não
+reservas: host, Dokploy e daemon Docker também consomem recursos; monitorar a
+folga real do host antes de a produção entrar. Não é sizing validado por carga;
+TASK-INFRA-021 deve confirmar health/boot/smoke em ARM64 e pedir revisão se
+houver OOM ou timeout.
 
 Não existe teste de carga deste stack e o cap de memória do Radar não limita
 todas as consultas: o caminho de lookup RFB do DuckDB usa `memory_limit=None`

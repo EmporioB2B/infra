@@ -5,6 +5,9 @@ temperature: 0.1
 permission:
   read:
     "*": "allow"
+    "/etc": "deny"
+    "/etc/*": "deny"
+    "/etc/**": "deny"
     "**/.env": "deny"
     "**/.env.*": "deny"
     "**/.env.example": "allow"
@@ -21,6 +24,8 @@ permission:
   list: "allow"
   bash:
     "*": "allow"
+    "*/etc": "deny"
+    "*/etc/*": "deny"
     "opencode debug config*": "deny"
     "sudo *": "deny"
     "rm *": "deny"
@@ -60,7 +65,11 @@ permission:
     "*DROP SCHEMA*": "deny"
     "*TRUNCATE*": "deny"
   task: "deny"
-  external_directory: "ask"
+  external_directory:
+    "*": "ask"
+    "/etc": "deny"
+    "/etc/*": "deny"
+    "/etc/**": "deny"
   todowrite: "allow"
   question: "allow"
   skill: "allow"

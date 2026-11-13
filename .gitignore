@@ -37,6 +37,7 @@ __pycache__/
 .opencode/package-lock.json
 .opencode/bun.lock
 .opencode/opencode.json*
+!.opencode/opencode.jsonc
 .opencode/tui.json*
 /opencode.json*
 /tui.json*

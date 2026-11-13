@@ -21,13 +21,16 @@ pessoal de cada desenvolvedor não é versionada.
 | `agents/` | agentes canônicos: `arquiteto` e `context-revisor` |
 | `context/` | fatos atuais, topologia alvo, catálogo de serviços e decisões |
 | `skills/` | skills canônicas e catálogo humano |
+| `opencode.jsonc` | política compartilhada do projeto para o OpenCode |
 | `tasks/futuras/` | planejamento compartilhado e versionado |
 | `tasks/passadas/` | histórico técnico selecionado, aditivo e imutável |
 
 ## Configuração pessoal
 
-`opencode.json` e `tui.json` ficam na máquina de cada desenvolvedor e são
-ignorados pelo Git. Um mínimo local pode ser:
+As configurações pessoais `opencode.json` e `tui.json` da raiz ficam na máquina
+de cada desenvolvedor e são ignoradas pelo Git. A política de acesso
+compartilhada fica em `.opencode/opencode.jsonc` e é versionada. Um mínimo
+pessoal local pode ser:
 
 ```json
 {

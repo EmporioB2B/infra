@@ -60,6 +60,8 @@ services:
       PGPASSWORD: ${POSTGRES_ADMIN_PASSWORD:?POSTGRES_ADMIN_PASSWORD obrigatória}
       EMPORIO_APP_DB_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD obrigatória para emporio_app}
       EMPORIO_MIGRATOR_DB_PASSWORD: ${SPRING_FLYWAY_PASSWORD:?SPRING_FLYWAY_PASSWORD obrigatória para emporio_migrador}
+    volumes:
+      - ../files/roles-bootstrap.sql:/bootstrap/roles.sql:ro
     networks:
       - database
     depends_on:
@@ -118,7 +120,9 @@ services:
       APP_PASSWORD_RESET_BASE_URL: ${APP_PASSWORD_RESET_BASE_URL:?APP_PASSWORD_RESET_BASE_URL staging obrigatória}
       APP_AUTH_COOKIE_SECURE: "true"
       RADAR_BASE_URL: http://radar:8000
-      MANAGEMENT_SERVER_ADDRESS: 127.0.0.1
+      RADAR_CONNECT_TIMEOUT: ${RADAR_CONNECT_TIMEOUT:-500ms}
+      RADAR_READ_TIMEOUT: ${RADAR_READ_TIMEOUT:-1s}
+      MANAGEMENT_SERVER_ADDRESS: 10.254.30.10
       APP_STORAGE_PROVIDER: R2
       APP_STORAGE_ALLOW_INSECURE_HTTP: "false"
       APP_STORAGE_READ_WRITE_R2_ENDPOINT: ${APP_STORAGE_READ_WRITE_R2_ENDPOINT:?endpoint R2 read-write do Back obrigatório}
@@ -147,10 +151,12 @@ services:
       APP_EMAIL_REPLY_TO: ${APP_EMAIL_REPLY_TO:?APP_EMAIL_REPLY_TO de staging obrigatório}
       APP_EMAIL_MEDIA_BASE_URL: https://media-staging.emporiob2b.com.br
     networks:
-      - apps
-      - database
-      - radar-net
-      - api-egress
+      apps:
+      database:
+      radar-net:
+      api-egress:
+      metrics-net:
+        ipv4_address: 10.254.30.10
     depends_on:
       postgres:
         condition: service_healthy
@@ -159,9 +165,9 @@ services:
       radar:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent --show-error --max-time 2 http://$${MANAGEMENT_SERVER_ADDRESS}:8081/actuator/health"]
-      interval: 10s
-      timeout: 3s
+      test: ["CMD-SHELL", "curl --fail --silent --show-error --max-time 10 http://$${MANAGEMENT_SERVER_ADDRESS}:8081/actuator/health"]
+      interval: 30s
+      timeout: 12s
       start_period: 60s
       retries: 12
     restart: unless-stopped
@@ -201,15 +207,19 @@ services:
       VIACEP_BASE_URL: https://viacep.com.br/ws
       VIACEP_TIMEOUT: ${VIACEP_TIMEOUT:-5}
       VIACEP_MAX_RESPONSE_BYTES: ${VIACEP_MAX_RESPONSE_BYTES:-16384}
+      METRICS_BIND_ADDRESS: 10.254.31.30
+      METRICS_PORT: "8082"
     volumes:
       - radar_state:/var/lib/radar-middleware/state
     networks:
-      - radar-net
-      - radar-egress
+      radar-net:
+      radar-egress:
+      radar-metrics-net:
+        ipv4_address: 10.254.31.30
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2).read()"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=12).read()"]
+      interval: 30s
+      timeout: 15s
       start_period: 180s
       retries: 12
     restart: unless-stopped
@@ -286,6 +296,57 @@ services:
           cpus: "0.10"
           memory: 128M
 
+  prometheus:
+    image: ${PROMETHEUS_IMAGE:?PROMETHEUS_IMAGE deve ser a imagem pinada por digest}
+    pull_policy: always
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        test -n "$$PROMETHEUS_REMOTE_WRITE_URL"
+        test -n "$$PROMETHEUS_REMOTE_WRITE_USERNAME"
+        test -s /etc/prometheus/remote-write-token
+        case "$$PROMETHEUS_REMOTE_WRITE_URL" in
+          https://*) ;;
+          *) echo "PROMETHEUS_REMOTE_WRITE_URL deve ser HTTPS"; exit 1 ;;
+        esac
+        sed -e "s|__REMOTE_WRITE_URL__|$$PROMETHEUS_REMOTE_WRITE_URL|g" \
+            -e "s|__REMOTE_WRITE_USERNAME__|$$PROMETHEUS_REMOTE_WRITE_USERNAME|g" \
+            /etc/prometheus/prometheus.template.yml > /tmp/prometheus.yml
+        exec /bin/prometheus \
+          --config.file=/tmp/prometheus.yml \
+          --storage.tsdb.path=/prometheus \
+          --storage.tsdb.retention.time=7d \
+          --storage.tsdb.wal-compression \
+          --web.listen-address=127.0.0.1:9090
+    environment:
+      PROMETHEUS_REMOTE_WRITE_URL: ${PROMETHEUS_REMOTE_WRITE_URL:?endpoint remote_write do Grafana Cloud obrigatório}
+      PROMETHEUS_REMOTE_WRITE_USERNAME: ${PROMETHEUS_REMOTE_WRITE_USERNAME:?instance ID do Grafana Cloud obrigatório}
+    volumes:
+      - prometheus-data:/prometheus
+      - ../files/prometheus.template.yml:/etc/prometheus/prometheus.template.yml:ro
+      - ../files/remote-write-token:/etc/prometheus/remote-write-token:ro
+    networks:
+      metrics-net:
+        ipv4_address: 10.254.30.20
+      radar-metrics-net:
+        ipv4_address: 10.254.31.20
+      prometheus-egress:
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 12
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *staging-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 512M
+
 networks:
   apps:
     name: emporio-staging_apps
@@ -308,9 +369,30 @@ networks:
   tunnel-egress:
     name: emporio-staging_tunnel-egress
     driver: bridge
+  metrics-net:
+    name: emporio-staging_metrics-net
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.254.30.0/24
+          gateway: 10.254.30.1
+  radar-metrics-net:
+    name: emporio-staging_radar-metrics-net
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.254.31.0/24
+          gateway: 10.254.31.1
+  prometheus-egress:
+    name: emporio-staging_prometheus-egress
+    driver: bridge
 
 volumes:
   pgdata:
     name: emporio-staging_pgdata
   radar_state:
     name: emporio-staging_radar_state
+  prometheus-data:
+    name: emporio-staging_prometheus-data

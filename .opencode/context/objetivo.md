@@ -25,20 +25,28 @@ fronteira forte de segurança; ver `vps_oracle.md` e `decisoes.md`.
   radar; sem banco em container (o PostgreSQL do Back é o Supabase externo),
   no mesmo host OCI de staging por decisão do operador.
 - CI/CD: **existente — workflow publisher Infra** de bootstrap de roles,
-  versionado mas ainda não executado/verificado remotamente; Backend também tem
-  workflow CI/publicação versionado, sem execução verificada nesta auditoria.
-  **Planejado — demais aplicações:** teste e publicação multiarch no GHCR; o
-  deploy de staging é manual pelo operador no Dokploy, sem chamada de Actions à
-  API/webhook. Package GHCR, permissões Manage Actions access, consumo do
-  artefato pelo Back e publicação remota permanecem não verificados. Produção
+  versionado mas ainda não executado/verificado remotamente; Backend e Radar
+  têm workflows CI/publicação versionados. **Existente — publicação verificada
+  (2026-11-13):** as três imagens de aplicação estão no GHCR com manifests
+  multiarch `linux/amd64` + `linux/arm64` (`imagetools inspect` colado pelo
+  operador; referências em `estado_atual.md`); runs no Actions não auditados;
+  Front sem workflow, publicação manual — perfil staging verificado em
+  2026-11-13 por `grep` na imagem (URL `api-staging` nos bundles browser e
+  SSR; evidência em `estado_atual.md`). O deploy de staging é manual pelo
+  operador no Dokploy, sem chamada de Actions à API/webhook. Package GHCR de
+  roles, permissões Manage Actions access e consumo do artefato pelo Back
+  permanecem não verificados. Produção
   está fora do contrato (`../../.github/workflows/publish-roles-bootstrap.yml:1-16`;
   `../Backend_Java/.github/workflows/backend-ci.yml:1-18`;
   `../../docs/cicd.md:8-19,23-35,82-110`).
-- Borda Cloudflare (**planejada**): túnel para
+- Borda Cloudflare: produção (**planejada**) — túnel para
   `emporiob2b.com.br` (front) e `api.emporiob2b.com.br` (api);
-  o staging usará Cloudflare Access; `media.emporiob2b.com.br` resolve para o
-  bucket público do R2 sem passar pela VPS. Tunnel/Access ainda não foram
-  configurados.
+  `media.emporiob2b.com.br` resolve para o bucket público do R2 sem passar
+  pela VPS. Staging (**existente na borda, 2026-11-13**) — túnel
+  `emporio-staging` criado no dashboard, connector liga via compose/Dokploy
+  no deploy; Cloudflare Access intercepta `staging`/`api-staging` (DNS e 302
+  verificados; primeiro login pendente); `media-staging` não configurado.
+  Detalhes em `estado_atual.md` e `vps_oracle.md`.
 - Runbooks: smoke tests (**existente — dev**); deploy, rollback e gestão de
   segredos (**planejado — produção**).
 

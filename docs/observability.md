@@ -158,6 +158,32 @@ do stack nem cria volume nomeado; usa bind temporário em `/tmp/opencode`:
 scripts/check-grafana-provisioning.sh
 ```
 
+## Staging: logs via Dokploy + métricas via Prometheus remote_write
+
+Decisão do operador (2026-11-13): o staging estreia completo, testando o
+desenho de observabilidade de produção de ponta a ponta, dentro do teto de
+2 CPU/12 GiB por stack.
+
+- **Logs**: mesmo fluxo da produção descrito abaixo — `dokploy-vector` no
+  host, configurado em Settings → Logs & Metrics do Dokploy, enviando ao
+  Grafana Cloud Loki. Nenhum Loki/Grafana entra no Compose.
+- **Métricas**: o Compose de staging inclui um Prometheus (`prom/prometheus`
+  pinado por digest) que raspa a API (`10.254.30.10:8081`, management com bind
+  na `metrics-net` interna) e o Radar (`10.254.31.30:8082`, listener separado
+  na `radar-metrics-net` interna) e envia as séries ao Grafana Cloud por
+  `remote_write`. Retenção local de 7 dias; UI somente em loopback do
+  container; saída externa exclusiva pela `prometheus-egress`.
+- Credenciais: URL e instance ID no Environment do Dokploy; o token
+  (`metrics:write`) em File Mount dedicado lido via `password_file` — nunca
+  em shell, repo ou log. Detalhes de montagem e validação em
+  `docs/staging-compose.md`.
+- Dashboards: o JSON versionado para o dev (`compose/grafana/dashboards/`)
+  pode ser importado no Grafana Cloud; as séries chegam com
+  `environment="staging"`. O contrato de métricas do Backend é o mesmo
+  (RED curado, sem buckets, heap agregada — sem RSS).
+- Pendente de prova: ingestão real no Grafana Cloud (logs e métricas),
+  consulta no Explore e distinção de labels quando a produção entrar.
+
 ## Produção: Grafana Cloud Loki via Dokploy
 
 O Compose da aplicação não deve conter Loki ou Grafana Cloud. O fluxo previsto

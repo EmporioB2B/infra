@@ -13,12 +13,14 @@ público, OCIDs, chaves, tokens ou credenciais.
   foi instalado; o projeto `Emporio Staging` e um serviço Compose foram criados
   no painel. O repo Infra contém `compose/docker-compose.staging.yml`, mas o
   painel ainda não recebeu YAML/configuração e não há aplicações implantadas.
-  Cloudflare Tunnel e Access ainda não foram configurados.
+  A borda Cloudflare de staging foi configurada em 2026-11-13 (túnel
+  `emporio-staging`, DNS e Access verificados); o connector liga no deploy.
 - Staging e produção precisarão usar stacks, redes, volumes, domínios, dados e
   segredos distintos. Isso não é isolamento forte: o kernel, host e daemon Docker
   serão compartilhados. Não colocar dados nem credenciais de produção no staging.
 - A proteção do staging escolhida é Cloudflare Access na borda; não será usado
-  Nginx Basic Auth como portão. O nome dos hostnames ainda não foi decidido.
+  Nginx Basic Auth como portão. Hostnames aprovados:
+  `staging.emporiob2b.com.br` e `api-staging.emporiob2b.com.br`.
 
 ## Instância e armazenamento
 

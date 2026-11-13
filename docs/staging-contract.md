@@ -13,8 +13,9 @@ somente nomes de variáveis e placeholders.
 | API | `api-staging.emporiob2b.com.br` | Cloudflare Access → Tunnel → `api:8080` |
 | Mídia pública | `media-staging.emporiob2b.com.br` | Custom Domain do bucket público R2 de staging; não passa pelo Tunnel |
 
-Os nomes foram aprovados como contrato, mas disponibilidade, DNS, Tunnel e
-Access ainda precisam ser verificados/configurados antes do deploy. Proteger os
+Os nomes foram aprovados como contrato. DNS e interceptação Access verificados
+em 2026-11-13 (rotas do túnel reportadas pelo operador); pendentes o primeiro
+login real no Access e a ligação do connector no deploy. Proteger os
 dois hostnames; não criar rota para o painel Dokploy, Postgres, Radar ou actuator.
 
 ## PostgreSQL e dados
@@ -88,25 +89,33 @@ dois hostnames; não criar rota para o painel Dokploy, Postgres, Radar ou actuat
   `https://api-staging.emporiob2b.com.br`, mídia
   `https://media-staging.emporiob2b.com.br`; `allowedHosts` inclui
   `staging.emporiob2b.com.br` e mantém `localhost` para o healthcheck da imagem.
-  O Front atual não aceita esses valores em
-  runtime. O Front agora contém configuração `staging` e build script, mas o
-  Dockerfile ainda executa `build:production`; o repo dono precisa concluir e
-  validar a seleção de staging na imagem (TASK-INFRA-002; operador informa que a
-  implementação está em andamento).
-- Publicar imagens de Back, Front e Radar para `linux/arm64` e `linux/amd64` é
-  gate de deploy. Não foram encontrados workflows de aplicação que comprovem
-  publicação multiarch; as mudanças pertencem aos repos donos e são rastreadas
-  como dependências, não implementadas pela Infra.
+  O Front não aceita esses valores em
+  runtime. O Dockerfile é parametrizado (`BUILD_PROFILE`, `API_BASE_URL`,
+  `IMAGE_BASE_URL`) e a imagem publicada com perfil staging foi verificada em
+  2026-11-13: URLs de staging compiladas nos bundles browser e SSR (evidência
+  em `.opencode/context/estado_atual.md`).
+- Imagens de Back, Front e Radar publicadas no GHCR com manifest
+  `linux/amd64,linux/arm64` — gate de deploy verificado em 2026-11-13
+  (tags/digests em `.opencode/context/estado_atual.md`). Back e Radar publicam
+  via workflows versionados nos repos donos; o Front foi publicado manualmente
+  e segue sem workflow de CI — pendência do contrato de produção
+  (TASK-INFRA-002/003), não do staging.
 
 ## Gates ainda não executados
 
 - Confirmar disponibilidade dos hostnames e provisionar DNS/Tunnel/Access.
+  Feito em 2026-11-13: DNS proxied e interceptação Access verificados
+  (`dig`/`curl` públicos); rotas do túnel reportadas pelo operador. Pendentes:
+  primeiro login real no Access e ligação do connector (que ocorre no deploy).
 - Provisionar buckets e credenciais não produtivas de R2 e SMTP no Dokploy.
-- Concluir TASK-INFRA-002 no repo Front e workflows multiarch nos repos donos.
+- Workflow de CI/publicação do Front no repo dono (a publicação manual atende
+  o staging; o contrato de produção segue pendente em TASK-INFRA-002/003).
 - Configurar Custom Domain R2 `media-staging.emporiob2b.com.br` no bucket público
   dedicado e confirmar políticas adequadas para conteúdo de teste.
-- Validar em runtime o teto aprovado de 1,5 CPU/3 GiB por stack; o sizing é
-  inicial e não houve teste de carga. Definir backup/retention do volume Postgres
-  antes de operar dados que precisem ser preservados.
+- Validar em runtime o teto aprovado de 2 CPU/12 GiB por stack (decisão do
+  operador de 2026-11-13: divisão meio a meio da VPS entre staging e produção
+  futura); o sizing é inicial e não houve teste de carga. Definir
+  backup/retention do volume Postgres antes de operar dados que precisem ser
+  preservados.
 - Provisionar valores reais por serviço no Dokploy; `.env.staging.example` é
   somente nomes/placeholders e não deve ser usado como arquivo de produção.

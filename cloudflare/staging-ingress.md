@@ -1,7 +1,10 @@
 # Handoff Cloudflare — staging
 
-Este arquivo é uma instrução para configuração posterior; nenhuma alteração foi
-aplicada ao dashboard Cloudflare, DNS, Tunnel, Access ou R2.
+Tunnel, DNS e Access de staging aplicados no dashboard em 2026-11-13 (túnel
+`emporio-staging`; DNS proxied e interceptação Access verificados por `dig`/
+`curl` públicos — evidência em `.opencode/context/estado_atual.md`). O
+connector liga no deploy, via serviço `cloudflared` do Compose. R2 (buckets,
+credenciais e Custom Domain `media-staging`) ainda não foi provisionado.
 
 ## Tunnel remoto
 

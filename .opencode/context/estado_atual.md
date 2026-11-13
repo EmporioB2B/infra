@@ -41,45 +41,132 @@ Fotografia factual vigente. Não é cronologia de tasks.
   produção; R2 dedicado por serviço (Back e Radar); SMTP real com credenciais
   distintas da produção e STARTTLS+AUTH; hostnames aprovados
   `staging.emporiob2b.com.br`, `api-staging.emporiob2b.com.br` e
-  `media-staging.emporiob2b.com.br` (Custom Domain do bucket público R2). Os
-  recursos reais, nomes de buckets e credenciais não foram provisionados/registrados.
+  `media-staging.emporiob2b.com.br` (Custom Domain do bucket público R2). Nomes
+  reais de buckets e credenciais não foram provisionados/registrados.
   **Existente — artefatos TASK-INFRA-020, não implantados:** Compose
-  `compose/docker-compose.staging.yml`, example de env, runbook e handoff
-  Cloudflare. **Planejado — staging:** Postgres e aplicações ainda não foram
-  implantados; YAML não foi configurado no Dokploy; DNS, Tunnel e Access também
-  não foram configurados. Imagens GHCR ARM64, File Mount do bootstrap e valores
-  reais permanecem gates de TASK-INFRA-021. Ver
+  `compose/docker-compose.staging.yml`, template
+  `compose/prometheus/prometheus.staging.yml`, example de env, runbook e
+  handoff Cloudflare. **Planejado — staging:** Postgres e aplicações ainda não foram
+  implantados; YAML não foi configurado no Dokploy. **Existente — borda
+   Cloudflare de staging (2026-11-13):** zona `emporiob2b.com.br` Active
+  (NS `dora`/`gannon.ns.cloudflare.com`); túnel remotamente gerenciado
+  `emporio-staging` (`87a7e326-bc1b-43fb-9091-212fa38e0fdb`) criado no
+  dashboard da conta dona da zona, status Inactive esperado — o connector
+  ainda não está implantado na VPS e liga via compose/Dokploy no deploy.
+  **Verificado (2026-11-13, `dig`/`curl` públicos):** DNS de
+  `staging.emporiob2b.com.br` e `api-staging.emporiob2b.com.br` na borda
+  Cloudflare (`188.114.96.2`/`188.114.97.2`, proxied) e Access interceptando
+  ambos com HTTP 302 ao login do time domain `soft-salad-0948`.
+  **Reportado pelo operador (não verificado independentemente):** rotas de
+  published application `staging` → `http://front:4000` e `api-staging` →
+  `http://api:8080` (o painel exige URL com prefixo `http://`), alvo CNAME
+  `<tunnel-id>.cfargotunnel.com` no dashboard e SSL/TLS da zona em Full
+  (strict). Policy/IdP do Access não auditados; o 302 prova interceptação,
+  não login — primeiro login real pendente. `media-staging.emporiob2b.com.br`
+  não configurado (R2 não provisionado; fora do túnel). Imagens GHCR ARM64 e
+  perfil staging da imagem do Front verificados em 2026-11-13
+  (`imagetools inspect` + `grep` na imagem publicada; referências no bullet
+  de imagens abaixo); **Existente — wiring de File Mounts no artefato:** o
+  Compose referencia `../files/roles.sql`, `../files/prometheus.template.yml`
+  e `../files/remote-write-token` como binds read-only para
+  `/bootstrap/roles.sql`, `/etc/prometheus/prometheus.template.yml` e
+  `/etc/prometheus/remote-write-token`. Render/topologia validado com
+  `docker compose config` e inspeção dos mounts; isso não comprova arquivos
+  existentes no Dokploy nem implantação. O File Mount anteriormente informado
+  pelo operador tinha UI `File Path /bootstrap/roles.sql`, `Mount Path /`;
+  mapeamentos finais da UI não foram confirmados. Os File Paths devem produzir
+  os nomes exatos sob `../files/`; confirmar presença nos containers e rerodar
+  deploy/smoke. Fonte: `compose/docker-compose.staging.yml:63-65,322-325`,
+  `../../docs/staging-compose.md:32-51`. Provider Loki no Dokploy
+  (conta/stack Grafana Cloud existente — bullet próprio abaixo), envs de
+   métricas no painel (valores verificados no example), valores reais,
+  primeiro login Access, connector no deploy e deploy/smoke permanecem gates
+  de TASK-INFRA-021. Ver
   [`../../docs/staging-contract.md`](../../docs/staging-contract.md).
+- **Existente — conta/stack Grafana Cloud (2026-11-13, criada pelo operador):**
+  slug `smallmarzipan1294`, região `prod-sa-east-1` (São Paulo), free tier.
+  Access Policies criadas: `emporio-staging-logs` (`logs:write`) e
+  `emporio-staging-metrics` (`metrics:write`); a geração dos tokens não está
+  confirmada (a policy de metrics exibia 0 tokens na última tela vista) e
+  nenhum token foi visto/registrado. Endpoints públicos de ingestão
+  verificados por `curl` (HTTP 401 sem auth — existem e exigem autenticação):
+  Loki `https://logs-prod-024.grafana.net` (tenant/user `1878826`) e Prometheus
+  remote_write
+  `https://prometheus-prod-40-prod-sa-east-1.grafana.net/api/prom/push`
+  (instance/user `3766316`, consistente com a URL do datasource de usage
+  insights do stack). Os IDs são usuários de basic auth, não segredos. Os
+  datasources provisionados na UI do Grafana exibem URLs internas
+  `*-local-nlb.internal.grafana.net`, que não servem para ingestão externa;
+  os endpoints públicos acima são os corretos. Destino: URL Loki + tenant
+  `1878826` + token `logs:write` → provider Grafana Loki no Dokploy
+  (`Settings → Logs & Metrics`, ainda não configurado; instala
+  `dokploy-vector`, push HTTPS outbound); URL remote_write + instance
+  `3766316` → envs do Compose de staging; token `metrics:write` → File Mount
+  `/etc/prometheus/remote-write-token`. **Existente — example atualizado:**
+  `env/.env.staging.example:74-86` contém os valores verificados de
+  `PROMETHEUS_REMOTE_WRITE_URL/USERNAME` (não secretos) e comentários com a
+  URL/user do provider Loki e o destino dos tokens (somente painel/File
+  Mount); `docker compose config --quiet` com o example vigente exit 0.
+  Pendentes: geração dos tokens, provider no Dokploy, envs/File Mounts no
+  painel e deploy/ingestão real.
 - **Plano aprovado — hosting:** staging primeiro; produção futura dividirá a
   mesma VPS por não haver outra máquina. Stacks, redes e segredos separados não
-  formam uma fronteira forte de segurança. Cloudflare Access para staging foi
-  escolhido; Tunnel, Access e aplicações ainda não foram instalados/configurados.
+  formam uma fronteira forte de segurança. Cloudflare Access de staging
+  configurado na borda e interceptando os dois hostnames (302 verificado em
+  2026-11-13); túnel `emporio-staging` criado no dashboard, connector ainda
+  não ligado na VPS (Inactive esperado até o deploy); primeiro login Access
+  pendente; aplicações não implantadas.
 - **Planejado — contrato CI/CD das aplicações:** `docs/cicd.md` determina gate de testes e
   publicação GHCR multiarch `linux/amd64,linux/arm64` por SHA completo em
   `main`; `latest` é opcional e não seleciona deploy. Deploy de staging é
   manual no Dokploy pelo operador; Actions não faz deploy. Produção está fora
   do contrato (`docs/cicd.md:8-19,23-35,62-76,115-129`).
-- **Existente — estado dos workflows:** Infra tem `.github/workflows/publish-roles-bootstrap.yml`
-  e Backend tem `.github/workflows/backend-ci.yml`; ambos estão versionados,
-  mas a execução remota ainda não foi comprovada nesta auditoria. Front e Radar
-  não têm workflow de CI/CD verificado. Package GHCR de roles, Manage Actions
-  access do Backend, consumo remoto do artefato pelo workflow Back, publicação
-  remota e deploy continuam não verificados
+- **Existente — estado dos workflows:** Infra tem `.github/workflows/publish-roles-bootstrap.yml`,
+  Backend tem `.github/workflows/backend-ci.yml` e Radar tem
+  `.github/workflows/ci.yml` (job verify com pytest+ruff e job publish em push
+  de `main`, tag `sha-<github.sha>`, `platforms: linux/amd64,linux/arm64`,
+  actions pinadas por SHA). Os três estão versionados. Front não possui
+  diretório `.github/` — segue sem workflow de CI/publicação; sua imagem de
+  staging foi publicada manualmente pelo operador. A publicação remota das
+  imagens de aplicação está verificada (2026-11-13, `docker buildx imagetools
+  inspect` colado pelo operador; referências no bullet de imagens abaixo): as
+  tags do Back (SHA completo) e do Radar (`sha-<SHA>`) coincidem com o formato
+  dos workflows versionados, evidenciando execução dos jobs de publicação; os
+  runs no Actions em si não foram auditados. Package GHCR de roles, Manage
+  Actions access do Backend, consumo remoto do artefato pelo workflow Back e
+  deploy continuam não verificados; os pacotes
+  `emporiob2b/{backend-java,front-angular,radar-middleware}` existem com as
+  tags verificadas e não são legíveis anonimamente (privados). A tag
+  `sha-<SHA>` do Radar diverge
+  do formato `<sha-completo>` previsto no contrato
   (`.github/workflows/publish-roles-bootstrap.yml:1-16,25-43,66-103`;
-  `../Backend_Java/.github/workflows/backend-ci.yml:1-18,44-53`;
-  `docs/cicd.md:8-14,91-110`).
+  `../Backend_Java/.github/workflows/backend-ci.yml:1-18,44-53,109-120`;
+  `../Radar_Middleware_Python/.github/workflows/ci.yml:18-59,77-85`;
+  `docs/cicd.md:8-14,67-74,91-110`).
 - **Existente — contrato do harness de roles:** no Backend, `EMPORIO_INFRA_ROLES_BOOTSTRAP_PATH`
   é um caminho de arquivo lido pelo harness de testes; variável de processo tem
   precedência e, ausente, o harness lê apenas essa chave exata do `.env`, sem
-  carregar outras chaves. O CI deve baixar/extrair o SQL Infra e fornecer esse
-  caminho antes de `./mvnw -B verify`; essa entrega pelo workflow Back ainda não
-  está verificada (`../Backend_Java/src/test/java/br/com/emporio/infrastructure/migration/InfrastructureRolesBootstrapSupport.java:21,30-42,45-109`;
+  carregar outras chaves. O workflow Back versionado já baixa o package
+  `infra-roles-bootstrap` pinado por digest, extrai `/bootstrap/roles.sql` e
+  define essa variável antes de `./mvnw -B verify`; a execução remota e o
+  acesso ao package não estão verificados
+  (`../Backend_Java/src/test/java/br/com/emporio/infrastructure/migration/InfrastructureRolesBootstrapSupport.java:21,30-42,45-109`;
+  `../Backend_Java/.github/workflows/backend-ci.yml:26-27,44-68`;
   `docs/cicd.md:103-110`). O SQL canônico e bootstrap de roles pertencem à Infra;
   migrations e runner Flyway pertencem ao Backend.
-- **Front staging:** o repo dono já define as URLs de staging e `allowedHosts`,
-  mas o Dockerfile atual ainda executa `build:production`; seleção do perfil
-  staging na imagem e publicação ARM64 seguem gates sob TASK-INFRA-002/003. O
-  operador informa que a implementação está em andamento.
+- **Existente — Front staging parametrizado:** o repo dono define as URLs de
+  staging e `allowedHosts`, e o Dockerfile aceita `ARG BUILD_PROFILE=production`,
+  `ARG API_BASE_URL` e `ARG IMAGE_BASE_URL`, executando
+  `npm run build -- "$BUILD_PROFILE"`; `build.env.example` documenta as URLs de
+  staging como entradas de build. A imagem ARM64 publicada manualmente está
+  verificada (2026-11-13, `imagetools inspect`) e o perfil staging do bundle
+  publicado também (2026-11-13, `grep` na imagem; evidência no bullet de
+  imagens abaixo); comprovar run/deploy segue gate da TASK-INFRA-021, e os
+  pré-requisitos de produção/prodlike do Front seguem sob TASK-INFRA-002/003;
+  o Front não tem workflow de CI/publicação
+  (`../Front_Angular/Dockerfile:17-19,33-35`,
+  `../Front_Angular/build.env.example:1-5`,
+  `../Front_Angular/angular.json:36-38,78-85`).
 - **Existente — dev:** compose de desenvolvimento em
   `compose/docker-compose.dev.yml`, definindo todos os serviços de longa duração,
   e jobs one-shot `db-bootstrap` e `migrate` para o contrato DB-08 Infra–Backend;
@@ -283,16 +370,80 @@ Fotografia factual vigente. Não é cronologia de tasks.
   Supabase, nem deploy automático; produção permanece fora do escopo
   (`docs/cicd.md:13-19,62-76,103-110,115-139`).
 - **Existente — documentação CI/CD:** `docs/cicd.md` documenta contrato, mas
-  não comprova runs, configuração de proteção de `main`, package GHCR,
-  permissões de leitura ou deploy. A existência dos workflows Infra/Backend
-  não equivale a publicação remota ou consumo integrado
+  não comprova runs, configuração de proteção de `main`, package GHCR de
+  roles, permissões de leitura ou deploy. A publicação remota das imagens de
+  aplicação está verificada (2026-11-13, bullet de imagens acima); a
+  existência dos workflows Infra/Backend/Radar não equivale a consumo
+  integrado do artefato de roles
   (`.github/workflows/publish-roles-bootstrap.yml:1-16`;
   `../Backend_Java/.github/workflows/backend-ci.yml:1-18`;
+  `../Radar_Middleware_Python/.github/workflows/ci.yml:1-16`;
   `docs/cicd.md:8-14,91-110,207-213`).
 - Dockerfiles de produção prontos e revisados nos 3 projetos principais
   (Back: temurin 25 + usuário não-root + healthcheck em 8081; Front: SSR
-  node:22 porta 4000; Radar: python 3.12 slim porta 8000 sem portas
-  publicadas). A publicação de imagens `linux/arm64` para a VPS ainda é gate.
+  node:22 porta 4000, build parametrizado por `BUILD_PROFILE`/`API_BASE_URL`/
+  `IMAGE_BASE_URL`; Radar: python 3.12 slim porta 8000 sem portas
+  publicadas).
+- **Existente — imagens de staging no GHCR, multiarch verificado (2026-11-13):**
+  o operador executou `docker buildx imagetools inspect` em máquina própria
+  autenticada no GHCR (clone `Emporio_Mkt`) e colou a saída nesta sessão; o
+  clone desta sessão (`Emporio_git`) não possui credencial GHCR. As três
+  imagens têm manifest multiarch `linux/amd64` + `linux/arm64`:
+  - `ghcr.io/emporiob2b/backend-java:10d03d7796b8a996c1580dcf56a3f95ea24c58dc`
+    — index digest
+    `sha256:222d33f7c5bd5c1ebf3314b8441d62e6f61b1891594ca09c3cda1351f3c3ead4`;
+  - `ghcr.io/emporiob2b/radar-middleware:sha-00208110c84de630ae0ef6b432c3988bd41e0ed4`
+    — index digest
+    `sha256:340395eef841bd8c96b22dd2e02672c8d8af55cc761517f0ac2419f25e4f3478`;
+    o index inclui ainda 2 attestation-manifests `unknown/unknown`
+    (proveniência buildx — normal, não são plataformas executáveis);
+  - `ghcr.io/emporiob2b/front-angular:32614c57fc8089e12de4406b51e485d5caf7c08a`
+    — index digest
+    `sha256:e140c9ff322d59d1e59610cdec5c3c93da18d38f4eea07c4dccc066c4b710d53`.
+  As tags do Back (SHA completo) e do Radar (`sha-<SHA>`) coincidem com o
+  formato dos workflows versionados
+  (`../Backend_Java/.github/workflows/backend-ci.yml:115-116`;
+  `../Radar_Middleware_Python/.github/workflows/ci.yml:59,81-83`), o que
+  evidencia execução dos jobs de publicação; a auditoria dos runs no Actions
+  em si não foi feita. O Front não tem workflow — publicação manual pelo
+  operador. Essas referências são fato verificado, não configuração: valores
+  reais de imagem vão somente no Dokploy. O gate "imagens ARM64 publicadas"
+  está verificado. **Perfil staging do Front — verificado (2026-11-13):** o
+  operador executou, em máquina autenticada no GHCR,
+  `docker run --rm --entrypoint sh ghcr.io/emporiob2b/front-angular:32614c57fc8089e12de4406b51e485d5caf7c08a -c "grep -rl 'api-staging.emporiob2b.com.br' dist | head -3"`;
+  o pull resolveu para o index digest
+  `sha256:e140c9ff322d59d1e59610cdec5c3c93da18d38f4eea07c4dccc066c4b710d53`
+  (o mesmo verificado acima) e o grep retornou
+  `dist/Emporio_Front/browser/chunk-CbtmA7w5.js` e
+  `dist/Emporio_Front/server/chunk-KNXTD5V5.mjs`: a URL
+  `https://api-staging.emporiob2b.com.br` está compilada nos bundles browser e
+  SSR da imagem publicada. Na fonte do repo dono, `environment.ts` e
+  `environment.staging.ts` diferem apenas no rótulo `environment`
+  ('production' vs 'staging') e leem os mesmos defines
+  `__API_BASE_URL__`/`__IMAGE_BASE_URL__`; `build-config.mjs` exige as duas
+  URLs não vazias no perfil staging (defaultando às URLs aprovadas), e
+  `allowedHosts` (`localhost` + `staging.emporiob2b.com.br`) está nas options
+  do target de build, valendo para qualquer perfil
+  (`../Front_Angular/src/environments/environment.ts:12-14`;
+  `../Front_Angular/src/environments/environment.staging.ts:6-8`;
+  `../Front_Angular/scripts/build-config.mjs:1-4,26-41`;
+  `../Front_Angular/angular.json:36-38`). O rótulo é cosmético; a prova
+  substantiva são as URLs de staging compiladas nos dois bundles. Com isso,
+  todos os gates de imagem da TASK-INFRA-021 estão fechados: Back/Radar/Front
+  multiarch `linux/amd64`+`linux/arm64` + perfil staging do Front verificados.
+  Gates remanescentes da 021: confirmar File Paths UI `roles.sql`,
+  `prometheus.template.yml` e `remote-write-token` (fontes sob `../files/`),
+  recadastrar/atualizar YAML no Dokploy, confirmar os arquivos nos containers
+  e rerodar deploy/smoke. Render local não comprova esses gates; token
+  `metrics:write` ainda sem geração confirmada. Também: provider Loki no Dokploy (conta/stack Grafana Cloud existente,
+  endpoints/IDs verificados — bullet próprio em "O que existe"), envs de
+  métricas no painel (`PROMETHEUS_IMAGE`,
+  `PROMETHEUS_REMOTE_WRITE_URL/USERNAME` — valores verificados no example),
+  provisionamento de valores reais
+  (R2 Back/Radar + objetos parquet do Radar, SMTP, senhas Postgres, JWT, token
+  do túnel), primeiro login Access (rotas do túnel reportadas pelo operador e
+  interceptação Access verificada em 2026-11-13; policy/IdP não auditados),
+  connector ligado no deploy e o deploy/smoke em si.
 - **Existente — Backend_Java:** Overrides de dev maduros no repo do Back: `docker-compose.yml`
   (backend + postgres-dev + postgres-test), `docker-compose.rustfs.yml`
   (R2 local com bootstrap idempotente de buckets e credenciais read-only
@@ -306,9 +457,12 @@ Fotografia factual vigente. Não é cronologia de tasks.
   código; healthcheck da api aponta porta/path errados). Aposentado pela
   TASK-INFRA-001; ainda presente no disco — remover ou manter é decisão
   final do operador.
-- **Existente — workflows:** há publisher de roles em Infra e workflow CI/publicação
-  no Backend; runs e publicação remota não foram verificados. Essa existência
-  não significa que o CI completo dos repositórios esteja operacional.
+- **Existente — workflows:** há publisher de roles em Infra e workflows CI/publicação
+  no Backend e no Radar. A publicação remota das imagens de aplicação está
+  verificada (2026-11-13, `imagetools inspect`); os runs no Actions não foram
+  auditados e o publisher de roles segue sem execução comprovada. O Front
+  segue sem workflow (imagem publicada manualmente). Essa existência não
+  significa que o CI completo dos repositórios esteja operacional.
 
 ## Fatos dos serviços que afetam a infra
 
@@ -329,11 +483,17 @@ Fotografia factual vigente. Não é cronologia de tasks.
   (S3 local é rejeitado) e o ViaCEP como `https://viacep.com.br/ws`; não tem
   autenticação de entrada; estado em SQLite reconstruível.
 - Front compila `apiBaseUrl`/`imageBaseUrl` no bundle (produção atual:
-  vazios). O SSR valida `Host` contra `allowedHosts`: a configuração staging
-  inclui `staging.emporiob2b.com.br` e preserva `localhost` para healthcheck
-  (`../Front_Angular/angular.json:36-38`). O build staging define as URLs
-  aprovadas da API e mídia (`../Front_Angular/angular.json:80-90`). Isso existe
-  no código, mas não comprova imagem ARM64 publicada nem deploy.
+  vazios). O SSR valida `Host` contra `allowedHosts` definido nas options do
+  target de build — `localhost` + `staging.emporiob2b.com.br`, valendo para
+  qualquer perfil (`../Front_Angular/angular.json:36-38`). O build staging usa
+  `environment.staging.ts` e define as URLs aprovadas da API e mídia
+  (`../Front_Angular/angular.json:78-85`,
+  `../Front_Angular/scripts/build-config.mjs:1-4,26-34`). O Dockerfile aceita
+  `BUILD_PROFILE`/`API_BASE_URL`/`IMAGE_BASE_URL` como build-args
+  (`../Front_Angular/Dockerfile:17-19,33-35`). A imagem ARM64 publicada e o
+  perfil staging do bundle estão verificados (2026-11-13, `imagetools inspect`
+  + `grep` na imagem: URL `api-staging` nos bundles browser e SSR — evidência
+  no bullet de imagens); o run/deploy segue não comprovado.
 - O proxy de dev do Front aponta para `http://backend:8080` — o serviço da
   api no compose dev deve se chamar `backend`.
 - Back com `APP_EMAIL_ENABLED=true` valida SMTP no boot: exige credenciais
@@ -374,16 +534,68 @@ Fotografia factual vigente. Não é cronologia de tasks.
   pin de imagem por sha no Dokploy. A integração de produção com Grafana Cloud
   Loki permanece planejada: o Dokploy configura o provider e instala
   `dokploy-vector`; nenhum Loki/Grafana entra no Compose da aplicação.
+  **Planejado — implantação dos logs de staging:** stdout dos containers →
+  driver `json-file` com rotação (buffer local; proposital para o agente do
+  Dokploy, não `fluentd` como no dev) → `dokploy-vector` no host → push HTTPS
+  → Grafana Cloud Loki, sem mudar o Compose e sem porta inbound. A conta/stack
+  Grafana Cloud é existente (bullet próprio em "O que existe"); o provider
+  Grafana Loki ainda não foi configurado no Dokploy e a geração dos tokens
+  não está confirmada (`compose/docker-compose.staging.yml:24-28`,
+  `../../docs/observability.md:161-185,192-197`). **Existente — métricas de staging,
+  artefato implementado, não implantado (direção aprovada em 2026-11-13):**
+  o Compose de staging contém o serviço `prometheus` com `remote_write` para
+  Grafana Cloud, redes internas `metrics-net` (`10.254.30.0/24`) e
+  `radar-metrics-net` (`10.254.31.0/24`) distintas das do dev,
+  `MANAGEMENT_SERVER_ADDRESS` da API em `10.254.30.10` (bind na `metrics-net`,
+  não mais loopback), `METRICS_BIND_ADDRESS`/`METRICS_PORT` no Radar
+  (`10.254.31.30:8082`) e bridge `prometheus-egress` exclusiva; template sem
+  segredos em `compose/prometheus/prometheus.staging.yml` (File Mount no
+  deploy). Importar os dashboards do dev no Grafana Cloud segue pendente de
+  operação. Validação local do artefato: `docker compose config --quiet`
+  exit 0, entrypoint executado na imagem real com valores fictícios e
+  `promtool check config` SUCCESS; deploy na VPS, ingestão real no Grafana
+  Cloud e scrape em runtime não provados — pendentes do primeiro deploy/smoke
+  (`compose/docker-compose.staging.yml:295-342,366-392`,
+  `../../docs/staging-compose.md:51-80`). Ressalva: os tetos de 2 CPU/12 GiB
+  por stack são limites, não reservas — a soma (24 GiB) não deixa folga de
+  sistema se ambos os stacks estourarem simultaneamente; monitorar a folga
+  real do host antes da produção entrar.
 - **Existente — contrato e artefatos de staging:** contrato, Compose
-  `compose/docker-compose.staging.yml`, env example e runbooks existem no repo;
-  não foram carregados no Dokploy nem implantados. TASK-INFRA-021 continua
-  bloqueada por imagens ARM64, build/publicação do Front, File Mount do
-  `/bootstrap/roles.sql` e provisionamento de recursos/valores externos
-  (R2, SMTP, DNS, Tunnel e Access). PG17 e roles separadas, assim como URLs,
-  são o desenho aprovado; recursos externos ainda não foram provisionados.
+  `compose/docker-compose.staging.yml` (incluindo o Prometheus de métricas),
+  template `compose/prometheus/prometheus.staging.yml`, env example e runbooks
+  existem no repo; não foram carregados no Dokploy nem implantados. O teto
+  aprovado por stack é 2 CPU/12 GiB (decisão do operador de 2026-11-13, divisão
+  meio a meio entre staging e produção futura; substitui o teto inicial de
+  1,5 CPU/3 GiB); os limites long-lived do Compose atual somam 1,75 CPU/
+  3.375 GiB (incluindo o Prometheus), dentro do teto, e permanecem válidos para
+  o primeiro deploy. Todos os gates de imagem da
+  TASK-INFRA-021 estão verificados (2026-11-13): Back/Radar/Front multiarch
+  `linux/amd64`+`linux/arm64` (`imagetools inspect` colado pelo operador) e
+  perfil staging do Front (`grep` na imagem publicada; URL `api-staging` nos
+  bundles browser e SSR — referências e evidência no bullet de imagens em
+  "O que existe"). TASK-INFRA-021 continua bloqueada pela confirmação dos
+  File Paths no Dokploy (`roles.sql`, `prometheus.template.yml`,
+  `remote-write-token` sob `../files/`), recadastro/atualização do YAML,
+  confirmação dos arquivos nos containers e rerun do deploy/smoke; render local
+  não comprova implantação. Token sem geração confirmada. Também segue bloqueada pelo
+  provider Loki no Dokploy (conta/stack Grafana Cloud existente, endpoints/IDs
+  verificados), pelas envs de métricas no painel (`PROMETHEUS_IMAGE`,
+  `PROMETHEUS_REMOTE_WRITE_URL/USERNAME` — valores verificados no example),
+  pelo provisionamento de valores
+  reais (R2 Back/Radar + objetos parquet do Radar, SMTP, senhas Postgres, JWT,
+  token do túnel), pelo primeiro login Access e pelo deploy/smoke em si.
+  **Existente — borda de staging (2026-11-13):** zona Active na Cloudflare,
+  túnel `emporio-staging` criado no dashboard (Inactive esperado; connector
+  desligado na VPS até o deploy), rotas `staging` → `http://front:4000` e
+  `api-staging` → `http://api:8080` reportadas pelo operador; DNS dos dois
+  hostnames na borda Cloudflare e interceptação Access (302 ao time domain
+  `soft-salad-0948`) verificados por `dig`/`curl`; policy/IdP não auditados,
+  primeiro login pendente; `media-staging` não configurado (R2 não
+  provisionado). Detalhes e evidência no bullet de artefatos TASK-INFRA-020
+  em "O que existe" e em `vps_oracle.md`. PG17 e roles separadas, assim como
+  URLs, são o desenho aprovado; buckets e credenciais não foram provisionados.
   O Dokploy está instalado, mas nenhum ambiente de aplicação está
-  implantado; MFA do painel foi adiado com exceção aceita (TASK-INFRA-022), e
-  imagens ARM64/pré-requisitos do Front também são gates.
+  implantado; MFA do painel foi adiado com exceção aceita (TASK-INFRA-022).
   Produção na mesma máquina continua futura e requer revisão explícita de
   recursos/isolamento (`docs/oracle-vps.md:12-20,83-91`;
   `tasks/passadas/20261112_TASK-INFRA-018-hardening-dokploy-excecao-mfa.md`;

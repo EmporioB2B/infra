@@ -5,6 +5,9 @@ temperature: 0.1
 permission:
   read:
     "/*": "allow"
+    "/etc": "deny"
+    "/etc/*": "deny"
+    "/etc/**": "deny"
     "**/.env": "deny"
     "**/.env.*": "deny"
     "**/.env.example": "allow"
@@ -16,6 +19,9 @@ permission:
     # livres (o git desfaz arquivos). Segredos e o .git do repo seguem
     # interditados.
     "*": "allow"
+    "/etc": "deny"
+    "/etc/*": "deny"
+    "/etc/**": "deny"
     ".git/**": "deny"
     "**/.env": "deny"
     "**/.env.*": "deny"
@@ -35,6 +41,9 @@ permission:
     # (Evidência que justifica a lista: meu `down -v` de 2026-09-26 perdeu
     # pgdata/rustfs-data/radar_state e nenhum commit traria de volta.)
     "*": "allow"
+    # Bloqueia referências explícitas à árvore /etc também nos comandos shell.
+    "*/etc": "deny"
+    "*/etc/*": "deny"
     # --- Git mutável: INTERDITADO; quem executa é o operador. Leitura livre.
     "git *": "deny"
     "git status*": "allow"
@@ -82,6 +91,9 @@ permission:
     "context-revisor": "allow"
   external_directory:
     "*": "ask"
+    "/etc": "deny"
+    "/etc/*": "deny"
+    "/etc/**": "deny"
   todowrite: "allow"
   question: "allow"
   skill: "allow"

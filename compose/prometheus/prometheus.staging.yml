@@ -1,0 +1,44 @@
+# Emporio B2B — Prometheus do staging (template para File Mount no Dokploy)
+#
+# Este arquivo NÃO contém segredos. No deploy:
+#   - __REMOTE_WRITE_URL__ e __REMOTE_WRITE_USERNAME__ são substituídos pelo
+#     entrypoint do serviço prometheus a partir do Environment do Dokploy;
+#   - o token de escrita (metrics:write) vive em File Mount separado no
+#     destino /etc/prometheus/remote-write-token e é lido via password_file,
+#     sem nunca passar por shell/sed.
+# Destino do File Mount: /etc/prometheus/prometheus.template.yml
+#
+# Retenção local curta (7d) com WAL comprimido; a consulta histórica é no
+# Grafana Cloud, para onde as séries são enviadas por remote_write.
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 5s
+  evaluation_interval: 15s
+  external_labels:
+    environment: staging
+    cluster: emporio-staging
+
+remote_write:
+  - url: __REMOTE_WRITE_URL__
+    basic_auth:
+      username: __REMOTE_WRITE_USERNAME__
+      password_file: /etc/prometheus/remote-write-token
+
+scrape_configs:
+  - job_name: emporio-backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - 10.254.30.10:8081
+        labels:
+          environment: staging
+          service: api
+  - job_name: emporio-radar
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - 10.254.31.30:8082
+        labels:
+          environment: staging
+          service: radar
