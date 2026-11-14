@@ -177,12 +177,140 @@ desenho de observabilidade de produção de ponta a ponta, dentro do teto de
   (`metrics:write`) em File Mount dedicado lido via `password_file` — nunca
   em shell, repo ou log. Detalhes de montagem e validação em
   `docs/staging-compose.md`.
-- Dashboards: o JSON versionado para o dev (`compose/grafana/dashboards/`)
-  pode ser importado no Grafana Cloud; as séries chegam com
-  `environment="staging"`. O contrato de métricas do Backend é o mesmo
-  (RED curado, sem buckets, heap agregada — sem RSS).
-- Pendente de prova: ingestão real no Grafana Cloud (logs e métricas),
-  consulta no Explore e distinção de labels quando a produção entrar.
+- Dashboards de staging versionados para importação manual: logs Loki em
+  `compose/grafana/dashboards-staging/emporio-staging-logs.json` e métricas
+  Prometheus em `compose/grafana/dashboards-staging/emporio-staging-metrics.json`.
+  Eles ficam fora de `compose/grafana/dashboards/`, diretório provisionado
+  automaticamente no Grafana local de dev. Importando os JSONs no Grafana
+  Cloud, selecione o datasource Loki/Prometheus correspondente no passo de
+  importação; os dashboards não dependem de UID local fixo.
+- O Label browser reportado pelo operador (2026-11-14) mostra como labels
+  indexados `dokploy_application`, `dokploy_environment`, `dokploy_project`,
+  `dokploy_server`, `dokploy_test` e `service_name`; `service_name` aparece
+  como `unknown_service`. `dokploy_service` é campo do envelope JSON, não label
+  indexado. Para o stack observado, selecionar
+  `dokploy_application="emporio-staging"`; `dokploy_environment` veio como
+  `production`, por isso não é usado para classificar esse stack.
+- Os eventos chegam como JSON externo com metadata de Dokploy/Docker e campo
+  `message` contendo o JSON estruturado da aplicação. O dashboard filtra o
+  label indexado de aplicação, faz `| json` no envelope, filtra o campo
+  `dokploy_service`, reescreve a linha para `message` e faz parse do JSON
+  interno. Os dropdowns de serviço são valores estáticos dos serviços definidos
+  em `compose/docker-compose.staging.yml`, pois as variáveis Loki `label_values`
+  só listam labels indexados — não campos JSON extraídos. São opções fixas e
+  controladas pela Infra (sem entrada livre); a opção `All` é mapeada para `.*`.
+  O nível também é dropdown estático, com o mesmo mapeamento para mostrar todos.
+  Backend/Front usam `log_level`: o parser JSON Loki sanitiza pontos em nomes de
+  campos para `_` e achata objetos aninhados; Radar usa `level`. Fonte:
+  [Loki LogQL parser](https://grafana.com/docs/loki/latest/query/log_queries/)
+  (consultado em 2026-11-14). **Relato do operador (2026-11-14):** testou no
+  Cloud as consultas/snippets de API/Front e Radar; essa execução não foi
+  reproduzida independentemente nesta sessão. IDs
+  Dokploy e request/correlation/event IDs nunca viram labels.
+- O Backend registra um evento estruturado de acesso HTTP com `method`, path
+  sanitizado, `status` e `duration_ms` (`AccessLogFilter`); o Front registra
+  evento SSR com os mesmos dados de acesso via `server-logger.ts`. O dashboard
+  oferece contagem de 4xx/5xx para API/Front. As séries RED do Prometheus seguem
+  úteis para status_class/outcome e latência agregada. O Radar desativa
+  `uvicorn.access` porque sua URL pode conter CEP; não reabilitar esse access
+  log. Outros containers são mostrados como logs brutos, sem pressupor parser de
+  nível comum.
+- O Dokploy informa que containers implantados antes de ativar Logs & Metrics
+  podem precisar de redeploy para receber metadados `dokploy_*`; o operador
+  relata logs no Cloud e confirmou a busca no dashboard; esta task não acessou a
+  UI de configuração do provider nem verificou independentemente a ingestão.
+  Fonte do contrato geral:
+  [Dokploy Logs & Metrics](https://docs.dokploy.com/docs/core/logs-and-metrics)
+  (consultado em 2026-11-14); labels/valores acima são evidência reportada pelo
+  operador, não inspeção independente.
+- O dashboard Prometheus usa os jobs e `environment="staging"` do template de
+  remote_write. `status_class`/`outcome` e latência vêm do RED; códigos exatos
+  4xx/5xx da API/Front são consultados no evento de access log. Backend expõe
+  média e máximo (sem buckets/percentis); Radar expõe histograma com
+  buckets e o dashboard calcula p50/p95. As séries HTTP só aparecem após
+  tráfego real. O dashboard Prometheus foi importado em um Grafana local
+  descartável, e as expressões PromQL passaram pelo parser `promtool check
+  rules`; isso não valida execução contra séries reais. **Relato do operador
+  (2026-11-14):** no Grafana Cloud confirmou os snippets LogQL e a busca
+  Request/Correlation ID da TASK-INFRA-024 e testou a versão atual do dashboard
+  Prometheus, conferindo consultas/séries disponíveis. Não houve verificação
+  independente da conta ou ingestão Cloud nesta sessão.
+- **Dashboard ampliado de métricas (TASK-INFRA-025, promovida em 2026-11-14):**
+  35 painéis e 84 expressões PromQL; importação testada em Grafana 12
+  descartável e sintaxe validada por `promtool check rules`. O operador confirma
+  que importou/testou a versão atual no Grafana Cloud e conferiu as séries
+  disponíveis; essa confirmação não foi reproduzida independentemente nesta
+  sessão. O dashboard
+  agrega os grupos já expostos pelos dois targets — API: RED por rota, heap,
+  CPU do processo JVM, threads/GC, Tomcat, Hikari, executores, dependência
+  Back→Radar, storage, email, notificações, catálogo e abrangência; Radar:
+  RED/CEP, CPU e memória do processo, descritores de arquivo e fila de campanhas.
+  Os timers Java continuam limitados a média/máximo; p50/p95 só são calculados
+  para histogramas do Radar. Isso **não** representa CPU/RAM por container:
+  API RSS não está exposto, métricas de processo do Radar não equivalem aos
+  limites cgroup, e cAdvisor permanece fora desta task. Séries de domínio
+  podem ficar vazias até o fluxo correspondente gerar tráfego.
+
+### Importação manual dos dashboards de staging
+
+1. No Grafana Cloud, crie a pasta `Emporio B2B - Staging` (se ainda não existir)
+   e confirme que existem os datasources Loki e Prometheus
+   apontando para os dados desta stack; Grafana Cloud não seleciona um datasource
+   automaticamente só por importar um JSON.
+2. Em **Dashboards → New → Import**, carregue um JSON de
+   `compose/grafana/dashboards-staging/` e selecione o datasource correspondente
+   solicitado pelo formulário. Importe os dois arquivos separadamente. Para
+   atualizar o dashboard de logs, confirme o overwrite do UID
+   `emporio-staging-logs`; para importar/atualizar métricas, use o UID
+   `emporio-staging-metrics`. Coloque ambos na pasta de staging.
+3. No dashboard de logs, use o dropdown `Serviço` e `Nível`; a aplicação já
+   fica fixada em `emporio-staging`. As opções de serviço correspondem ao
+   Compose versionado. Teste `api` + `ERROR`, `radar` + `ERROR`, depois
+   `All`; os painéis HTTP devem mostrar 4xx e 5xx da API/Front. O dashboard não
+   tem data links: clicar nos gráficos não navega nem gera query. Em vez disso,
+   confira o painel de código **Consultas LogQL para copiar no Explore**: ele
+   acompanha os dropdowns. Copie a consulta da fonte desejada e cole no Explore.
+   Se não houver eventos no intervalo escolhido, o painel pode ficar vazio.
+4. No dashboard de métricas, teste período com tráfego na API e no Radar. A
+   versão ampliada inclui runtime, pools, executores e operações de domínio que
+   já pertencem aos contratos dos dois targets. RED e métricas de domínio só
+   aparecem depois que as operações correspondentes ocorrem; readiness e target
+   `up` não dependem de tráfego de negócio. Heap da API não é RSS/container, e
+   CPU/RSS do Radar são métricas do processo.
+
+### Drilldown por Request ID / Correlation ID
+
+Um ponto do gráfico é uma contagem agregada por serviço/classe/intervalo, não
+um evento individual com um `request_id` único. Use os dropdowns para preparar
+a query no painel de código e execute-a no Explore; escolha uma linha específica
+e copie o ID do corpo do evento.
+
+O dashboard inclui a caixa `Request/Correlation ID`: cole um `request_id` de um
+evento da API (ou `correlation_id` do Radar), pressione **Enter** e aguarde os
+painéis para listar eventos que compartilham o valor, parseando o JSON interno.
+No código do Backend,
+`RestClientRadarHttpClient` encaminha o `request_id` do MDC como
+`X-Correlation-ID`; o Radar aceita esse header e o registra como
+`correlation_id`. Isso permite procurar a chamada API→Radar pelo mesmo ID.
+Não use o ID como label Loki: é um campo de alta cardinalidade no corpo do log.
+O `request_id` de um evento SSR do Front não deve ser presumido igual ao da
+requisição API do navegador; teste a propagação antes de tratar Front, API e
+Radar como uma única cadeia.
+
+LogQL de referência no Explore para a estrutura observada (o serviço é campo
+extraído do JSON, não stream label):
+
+```logql
+{dokploy_application="emporio-staging"} | json | dokploy_service="api" | line_format "{{.message}}" | json | log_level=~"(?i)(error|fatal|critical)"
+{dokploy_application="emporio-staging"} | json | dokploy_service="api" | line_format "{{.message}}" | json | status=~"5.."
+{dokploy_application="emporio-staging"} | json | dokploy_service="radar" | line_format "{{.message}}" | json | level=~"(?i)(error|fatal|critical)"
+{dokploy_application="emporio-staging"} | json | line_format "{{.message}}" | json | (request_id="COLE_AQUI_O_ID" or correlation_id="COLE_AQUI_O_ID")
+```
+
+O dashboard de logs mostra códigos HTTP 4xx/5xx para API/Front; use o dashboard
+Prometheus para status_class/outcome e latência agregada. O Radar desativa
+`uvicorn.access` porque a URL de acesso pode conter CEP; não reabilitar access
+logs nem usar campos de alta cardinalidade como labels Loki.
 
 ## Produção: Grafana Cloud Loki via Dokploy
 

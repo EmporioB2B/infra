@@ -1,0 +1,1677 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Grafana Cloud Prometheus",
+      "description": "Datasource Prometheus com remote_write do staging",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "12.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": ""
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "API e Radar up medem scrape dos endpoints Prometheus, não disponibilidade HTTP pública nem readiness da aplicação. A série radar_health_ready é readiness do Radar; o contrato atual não expõe readiness equivalente da API.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "up{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "API",
+          "refId": "A"
+        },
+        {
+          "expr": "up{job=\"emporio-radar\", environment=\"staging\"}",
+          "legendFormat": "Radar scrape",
+          "refId": "B"
+        },
+        {
+          "expr": "radar_health_ready{job=\"emporio-radar\", environment=\"staging\"}",
+          "legendFormat": "Radar ready",
+          "refId": "C"
+        }
+      ],
+      "title": "Disponibilidade e readiness",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (status_class, outcome) (rate(http_server_requests_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "API {{status_class}} / {{outcome}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (status_class, outcome) (rate(radar_http_requests_total{job=\"emporio-radar\", environment=\"staging\"}[5m]))",
+          "legendFormat": "Radar {{status_class}} / {{outcome}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Requisições HTTP por segundo — classe de status e outcome",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (status_class) (rate(http_server_duration_seconds_sum{job=\"emporio-backend\", environment=\"staging\"}[5m])) / sum by (status_class) (rate(http_server_duration_seconds_count{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "API média {{status_class}}",
+          "refId": "A"
+        },
+        {
+          "expr": "max by (status_class) (http_server_duration_seconds_max{job=\"emporio-backend\", environment=\"staging\"})",
+          "legendFormat": "API máx {{status_class}}",
+          "refId": "B"
+        }
+      ],
+      "title": "API — latência média e máxima (sem buckets/percentis)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, status_class) (rate(radar_http_duration_seconds_bucket{job=\"emporio-radar\", environment=\"staging\"}[5m])))",
+          "legendFormat": "Radar p95 {{status_class}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, status_class) (rate(radar_http_duration_seconds_bucket{job=\"emporio-radar\", environment=\"staging\"}[5m])))",
+          "legendFormat": "Radar p50 {{status_class}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Radar — latência p50/p95 (histograma com buckets)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (uf, outcome) (rate(radar_cep_queries_total{job=\"emporio-radar\", environment=\"staging\"}[5m]))",
+          "legendFormat": "CEP {{uf}} / {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Consultas CEP por UF e resultado",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Detalha as labels route_template/method sem abrir séries de alta cardinalidade arbitrária. A latência HTTP da API não possui buckets; não há p95/p99.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (route_template, method) (rate(http_server_requests_total{job=\"emporio-backend\", environment=\"staging\"}[5m])))",
+          "legendFormat": "{{method}} {{route_template}}",
+          "refId": "A"
+        },
+        {
+          "expr": "topk(10, sum by (route_template, method) (rate(http_server_requests_total{job=\"emporio-backend\", environment=\"staging\", outcome=\"failure\"}[5m])))",
+          "legendFormat": "falha {{method}} {{route_template}}",
+          "refId": "B"
+        }
+      ],
+      "title": "API — rotas com maior tráfego e falhas",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Heap agregada da JVM; não representa RSS nem RAM total do container. O máximo pode não ser reportado pela JVM.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 39
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "jvm_heap_used_bytes{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "heap usada",
+          "refId": "A"
+        },
+        {
+          "expr": "jvm_heap_max_bytes{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "heap máxima",
+          "refId": "B"
+        }
+      ],
+      "title": "API — heap JVM usada e máxima",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Percentual apenas quando jvm_heap_max_bytes é maior que zero; não é percentual de memória do container.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 39
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 * jvm_heap_used_bytes{job=\"emporio-backend\", environment=\"staging\"} / (jvm_heap_max_bytes{job=\"emporio-backend\", environment=\"staging\"} > 0)",
+          "legendFormat": "heap usada / máximo",
+          "refId": "A"
+        }
+      ],
+      "title": "API — heap JVM utilizada (%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Métricas agregadas e, para estados de threads, label state de conjunto fechado.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 47
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "jvm_threads_live_threads{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "threads live",
+          "refId": "A"
+        },
+        {
+          "expr": "jvm_threads_peak_threads{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "threads pico",
+          "refId": "B"
+        },
+        {
+          "expr": "jvm_classes_loaded_count{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "classes carregadas",
+          "refId": "C"
+        },
+        {
+          "expr": "jvm_threads_states_threads{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "threads {{state}}",
+          "refId": "D"
+        },
+        {
+          "expr": "jvm_threads_daemon_threads{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "threads daemon",
+          "refId": "E"
+        },
+        {
+          "expr": "jvm_threads_started_threads{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "threads iniciadas",
+          "refId": "F"
+        }
+      ],
+      "title": "API — threads e classes JVM",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Taxas de alocação/promoção. Não há métrica de pausa GC permitida no contrato.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes/sec"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 47
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(jvm_gc_memory_allocated_bytes_total{job=\"emporio-backend\", environment=\"staging\"}[5m])",
+          "legendFormat": "bytes alocados/s",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(jvm_gc_memory_promoted_bytes_total{job=\"emporio-backend\", environment=\"staging\"}[5m])",
+          "legendFormat": "bytes promovidos/s",
+          "refId": "B"
+        }
+      ],
+      "title": "API — alocação e atividade de GC",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Percentual reportado pelo binder da JVM; interpretar como sinal de pressão de GC, não como tempo de pausa individual.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 55
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 * jvm_gc_overhead{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "overhead GC",
+          "refId": "A"
+        }
+      ],
+      "title": "API — overhead de GC (%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Métricas agregadas entre conectores; gauges de ocupação relativa.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 55
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 * tomcat_threads_busy{job=\"emporio-backend\", environment=\"staging\"} / clamp_min(tomcat_threads_config_max{job=\"emporio-backend\", environment=\"staging\"}, 1)",
+          "legendFormat": "threads ocupadas / máximo",
+          "refId": "A"
+        },
+        {
+          "expr": "100 * tomcat_connections_current{job=\"emporio-backend\", environment=\"staging\"} / clamp_min(tomcat_connections_config_max{job=\"emporio-backend\", environment=\"staging\"}, 1)",
+          "legendFormat": "conexões atuais / máximo",
+          "refId": "B"
+        }
+      ],
+      "title": "API — saturação de threads e conexões Tomcat (%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Pool name é allowlisted. Pendências persistentes ou ativas próximas do máximo podem indicar contenção no banco.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 63
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "hikaricp_connections_active{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "{{pool}} ativas",
+          "refId": "A"
+        },
+        {
+          "expr": "hikaricp_connections_idle{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "{{pool}} ociosas",
+          "refId": "B"
+        },
+        {
+          "expr": "hikaricp_connections_pending{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "{{pool}} pendentes",
+          "refId": "C"
+        },
+        {
+          "expr": "hikaricp_connections_max{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "{{pool}} máximo",
+          "refId": "D"
+        },
+        {
+          "expr": "hikaricp_connections_min{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "{{pool}} mínimo",
+          "refId": "E"
+        }
+      ],
+      "title": "API — pool Hikari por pool",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Executores limitados de email; todos os nomes vêm de conjunto fechado.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 63
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "executor_active_threads{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "{{name}} ativas",
+          "refId": "A"
+        },
+        {
+          "expr": "executor_pool_max_threads{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "{{name}} máximo",
+          "refId": "B"
+        },
+        {
+          "expr": "executor_queued_tasks{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "{{name}} na fila",
+          "refId": "C"
+        },
+        {
+          "expr": "rate(executor_rejections_total{job=\"emporio-backend\", environment=\"staging\"}[5m])",
+          "legendFormat": "{{name}} rejeições/s",
+          "refId": "D"
+        },
+        {
+          "expr": "executor_completed_tasks_total{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "{{name}} concluídas",
+          "refId": "E"
+        },
+        {
+          "expr": "executor_pool_core_threads{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "{{name}} core",
+          "refId": "F"
+        },
+        {
+          "expr": "executor_pool_size_threads{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "{{name}} tamanho",
+          "refId": "G"
+        },
+        {
+          "expr": "executor_queue_remaining_tasks{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "{{name}} espaço livre na fila",
+          "refId": "H"
+        }
+      ],
+      "title": "API — executores de email",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Métricas do cliente HTTP do Backend ao Radar; complementa o RED do servidor Radar. Counters só aparecem após chamadas.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 71
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation, outcome) (rate(radar_http_requests_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "{{operation}} / {{outcome}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (operation, error_code) (rate(radar_http_timeouts_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "timeout {{operation}} / {{error_code}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (operation, error_code) (rate(radar_http_errors_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "erro {{operation}} / {{error_code}}",
+          "refId": "C"
+        }
+      ],
+      "title": "API → Radar — chamadas, erros e timeouts",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Taxas agregadas por labels finitas; operação/provider só aparecem quando exercitados.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 71
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation, provider, outcome) (rate(storage_operations_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "{{operation}} / {{provider}} / {{outcome}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (operation, error_code) (rate(storage_failures_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "falha {{operation}} / {{error_code}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (operation) (rate(storage_cleanup_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "cleanup {{operation}}",
+          "refId": "C"
+        }
+      ],
+      "title": "API — operações de storage e falhas",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Timer Java sem buckets: média é possível; p50/p95/p99 não.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 79
+      },
+      "id": 17,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation) (rate(storage_operation_duration_seconds_sum{job=\"emporio-backend\", environment=\"staging\"}[5m])) / sum by (operation) (rate(storage_operation_duration_seconds_count{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "{{operation}} média",
+          "refId": "A"
+        }
+      ],
+      "title": "API — duração média das operações de storage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Counters de email aparecem conforme há envio/retentativa; não expõe conteúdo nem destinatário.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 79
+      },
+      "id": 18,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (stage, outcome) (rate(email_delivery_attempts_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "tentativa {{stage}} / {{outcome}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (stage, dependency) (rate(email_delivery_errors_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "erro {{stage}} / {{dependency}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (stage, dependency) (rate(email_delivery_timeouts_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "timeout {{stage}} / {{dependency}}",
+          "refId": "C"
+        },
+        {
+          "expr": "sum by (stage, dependency) (rate(email_delivery_retries_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "retry {{stage}} / {{dependency}}",
+          "refId": "D"
+        }
+      ],
+      "title": "API — entrega de email: tentativas, falhas e retries",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Timer sem buckets; apresenta média e não percentis.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 87
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (stage, outcome) (rate(email_delivery_duration_seconds_sum{job=\"emporio-backend\", environment=\"staging\"}[5m])) / sum by (stage, outcome) (rate(email_delivery_duration_seconds_count{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "{{stage}} / {{outcome}} média",
+          "refId": "A"
+        }
+      ],
+      "title": "API — duração média de entrega de email",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Métricas de operações, falhas, conflitos e resolução de destino da inbox; condicionadas a uso do domínio.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 87
+      },
+      "id": 20,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation, outcome) (rate(notificacao_operations_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "{{operation}} / {{outcome}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (operation, error_code) (rate(notificacao_failures_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "falha {{operation}} / {{error_code}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (operation) (rate(notificacao_idempotency_conflicts_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "conflito idempotência {{operation}}",
+          "refId": "C"
+        },
+        {
+          "expr": "sum by (operation) (rate(notificacao_destination_resolutions_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "resolução destino {{operation}}",
+          "refId": "D"
+        }
+      ],
+      "title": "API — notificações/inbox",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Timer Java sem buckets; não calcular p50/p95.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 95
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation) (rate(notificacao_operation_duration_seconds_sum{job=\"emporio-backend\", environment=\"staging\"}[5m])) / sum by (operation) (rate(notificacao_operation_duration_seconds_count{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "{{operation}} média",
+          "refId": "A"
+        }
+      ],
+      "title": "API — duração média de operações de notificação",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Operações de catálogo agrupadas por dimensões finitas; séries surgem quando os fluxos são exercitados.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 103
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation, outcome) (rate(catalogo_produto_publicacao_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "publicação {{operation}} / {{outcome}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (operation, outcome) (rate(catalogo_produto_imagem_operacoes_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "imagem {{operation}} / {{outcome}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (operation, outcome) (rate(catalogo_aceite_notificacao_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "aceite {{operation}} / {{outcome}}",
+          "refId": "C"
+        },
+        {
+          "expr": "sum by (contexto, estado, outcome) (rate(catalogo_produto_atualizacao_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "atualização {{contexto}} / {{estado}} / {{outcome}}",
+          "refId": "D"
+        },
+        {
+          "expr": "sum by (operation, outcome) (rate(catalogo_produto_publicacao_imagens_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "imagens publicação {{operation}} / {{outcome}}",
+          "refId": "E"
+        },
+        {
+          "expr": "sum by (operation, outcome) (rate(catalogo_produto_imagem_itens_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "itens imagem {{operation}} / {{outcome}}",
+          "refId": "F"
+        }
+      ],
+      "title": "API — catálogo: publicação, imagens, aceite e atualização",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Agrupa volume médio de resposta, respostas acima do limite e atualizações; não usa conteúdo de CNPJ.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 111
+      },
+      "id": 23,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (escopo) (rate(estabelecimentos_abrangencia_oversized_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "resposta excedeu limite / {{escopo}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (contexto, outcome) (rate(estabelecimentos_abrangencia_update_total{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "atualização {{contexto}} / {{outcome}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (escopo) (rate(estabelecimentos_abrangencia_response_size_bytes_sum{job=\"emporio-backend\", environment=\"staging\"}[5m])) / sum by (escopo) (rate(estabelecimentos_abrangencia_response_size_bytes_count{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "bytes médios / {{escopo}}",
+          "refId": "C"
+        },
+        {
+          "expr": "rate(estabelecimentos_abrangencia_update_body_size_bytes_sum{job=\"emporio-backend\", environment=\"staging\"}[5m]) / clamp_min(rate(estabelecimentos_abrangencia_update_body_size_bytes_count{job=\"emporio-backend\", environment=\"staging\"}[5m]), 1e-9)",
+          "legendFormat": "bytes médios do corpo de atualização",
+          "refId": "D"
+        }
+      ],
+      "title": "API — abrangência de estabelecimentos",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "CPU do processo Radar, não uso normalizado pelo limite cgroup do container.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cores"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 111
+      },
+      "id": 24,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(process_cpu_seconds_total{job=\"emporio-radar\", environment=\"staging\"}[5m])",
+          "legendFormat": "CPU processo",
+          "refId": "A"
+        }
+      ],
+      "title": "Radar — CPU do processo (cores)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "ProcessCollector do Radar: métricas do processo, não memória/limite exato do container. Use outro painel para file descriptors.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 119
+      },
+      "id": 25,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "process_resident_memory_bytes{job=\"emporio-radar\", environment=\"staging\"}",
+          "legendFormat": "RSS processo",
+          "refId": "A"
+        },
+        {
+          "expr": "process_virtual_memory_bytes{job=\"emporio-radar\", environment=\"staging\"}",
+          "legendFormat": "memória virtual",
+          "refId": "B"
+        }
+      ],
+      "title": "Radar — memória residente e virtual do processo",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Pressão de descritores do processo Radar.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 119
+      },
+      "id": 26,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 * process_open_fds{job=\"emporio-radar\", environment=\"staging\"} / clamp_min(process_max_fds{job=\"emporio-radar\", environment=\"staging\"}, 1)",
+          "legendFormat": "FDs abertos / máximo",
+          "refId": "A"
+        }
+      ],
+      "title": "Radar — descritores de arquivo em uso (%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Histograma explícito de lookup CEP incluindo fallback ViaCEP; percentis são válidos para esta família.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 127
+      },
+      "id": 27,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, outcome) (rate(radar_cep_lookup_duration_seconds_bucket{job=\"emporio-radar\", environment=\"staging\"}[5m])))",
+          "legendFormat": "CEP p50 / {{outcome}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, outcome) (rate(radar_cep_lookup_duration_seconds_bucket{job=\"emporio-radar\", environment=\"staging\"}[5m])))",
+          "legendFormat": "CEP p95 / {{outcome}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Radar — latência das consultas CEP (p50/p95)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Agrega codigo_cidade fora da legenda para reduzir séries no painel; a métrica subjacente ainda tem label cidade finito.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 127
+      },
+      "id": 28,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (uf) (rate(radar_cep_primary_city_queries_total{job=\"emporio-radar\", environment=\"staging\"}[5m]))",
+          "legendFormat": "{{uf}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Radar — consultas à cidade primária por UF",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Snapshot agregado da fila sem IDs de jobs. Séries podem não aparecer se o fluxo de campanhas ainda não estiver ativo.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 135
+      },
+      "id": 29,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "radar_campaign_jobs{job=\"emporio-radar\", environment=\"staging\"}",
+          "legendFormat": "{{execution_status}} / {{delivery_status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Radar — fila de campanhas por estado",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Gauge agregado da idade da campanha pendente mais antiga; zero significa fila vazia ou idade indisponível.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 135
+      },
+      "id": 30,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "radar_campaign_queue_oldest_age_seconds{job=\"emporio-radar\", environment=\"staging\"}",
+          "legendFormat": "idade da mais antiga",
+          "refId": "A"
+        }
+      ],
+      "title": "Radar — idade da campanha mais antiga na fila",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "CPU do processo reportado pela JVM/Micrometer; não equivale a CPU cgroup nem a percentual do limite do container.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 143
+      },
+      "id": 31,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 * process_cpu_usage{job=\"emporio-backend\", environment=\"staging\"}",
+          "legendFormat": "CPU do processo JVM",
+          "refId": "A"
+        }
+      ],
+      "title": "API — CPU do processo JVM (%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Timer do cliente HTTP Back→Radar, sem buckets: média e máximo, não percentis.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 143
+      },
+      "id": 32,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation) (rate(radar_http_duration_seconds_sum{job=\"emporio-backend\", environment=\"staging\"}[5m])) / sum by (operation) (rate(radar_http_duration_seconds_count{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "{{operation}} média",
+          "refId": "A"
+        },
+        {
+          "expr": "max by (operation) (radar_http_duration_seconds_max{job=\"emporio-backend\", environment=\"staging\"})",
+          "legendFormat": "{{operation}} máximo",
+          "refId": "B"
+        }
+      ],
+      "title": "API → Radar — duração média e máxima",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Timers de catálogo sem buckets: média ponderada por operação/estado, não p50/p95.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 151
+      },
+      "id": 33,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation) (rate(catalogo_produto_publicacao_duration_seconds_sum{job=\"emporio-backend\", environment=\"staging\"}[5m])) / sum by (operation) (rate(catalogo_produto_publicacao_duration_seconds_count{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "publicação {{operation}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (operation) (rate(catalogo_produto_imagem_operacao_duration_seconds_sum{job=\"emporio-backend\", environment=\"staging\"}[5m])) / sum by (operation) (rate(catalogo_produto_imagem_operacao_duration_seconds_count{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "imagem {{operation}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (operation) (rate(catalogo_aceite_notificacao_duration_seconds_sum{job=\"emporio-backend\", environment=\"staging\"}[5m])) / sum by (operation) (rate(catalogo_aceite_notificacao_duration_seconds_count{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "aceite {{operation}}",
+          "refId": "C"
+        },
+        {
+          "expr": "sum by (contexto, estado) (rate(catalogo_produto_atualizacao_duration_seconds_sum{job=\"emporio-backend\", environment=\"staging\"}[5m])) / sum by (contexto, estado) (rate(catalogo_produto_atualizacao_duration_seconds_count{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "atualização {{contexto}} / {{estado}}",
+          "refId": "D"
+        }
+      ],
+      "title": "API — duração média das operações de catálogo",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Média do tempo de aquisição por pool. Se a versão/exporter não expuser a série no scrape, remover este painel em vez de substituir por estimativa.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 159
+      },
+      "id": 34,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (pool) (rate(hikaricp_connections_acquire_seconds_sum{job=\"emporio-backend\", environment=\"staging\"}[5m])) / sum by (pool) (rate(hikaricp_connections_acquire_seconds_count{job=\"emporio-backend\", environment=\"staging\"}[5m]))",
+          "legendFormat": "{{pool}} aquisição média",
+          "refId": "A"
+        }
+      ],
+      "title": "API — aquisição média de conexão Hikari",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Taxa de submissões agregada pelos resultados finitos do contrato. Pode ficar vazio enquanto o fluxo de campanhas não estiver ativo.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 159
+      },
+      "id": 35,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (rate(radar_campaign_job_submissions_total{job=\"emporio-radar\", environment=\"staging\"}[5m]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Radar — submissões de campanhas por resultado",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "application-metrics",
+    "emporio",
+    "http-red",
+    "jvm",
+    "prometheus",
+    "radar",
+    "runtime",
+    "staging"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Emporio B2B — Métricas de staging",
+  "uid": "emporio-staging-metrics",
+  "version": 4,
+  "weekStart": "",
+  "description": "Dashboard de métricas de staging para as séries atualmente coletadas da API e do Radar. Não inclui métricas de host/container (cAdvisor é follow-up)."
+}

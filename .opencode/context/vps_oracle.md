@@ -114,12 +114,21 @@ na console antes de qualquer operação. O runbook legível está em
   (estimativa) e a soma dos tetos (24 GiB) não deixa folga de sistema se ambos
   os stacks estourarem simultaneamente — monitorar a folga real do host antes
   da produção entrar. Métricas de staging (Prometheus com `remote_write`
-  dentro do Compose) são **artefato existente, não implantado**; logs via
-  `dokploy-vector` → Grafana Cloud Loki no host seguem **planejados** — a
-  conta/stack Grafana Cloud é existente (operador, 2026-11-13:
-  `smallmarzipan1294`, `prod-sa-east-1`, free tier; endpoints/IDs verificados
-  em `estado_atual.md`/`decisoes.md`), mas o provider Grafana Loki ainda não
-  foi configurado no Dokploy e a geração dos tokens não está confirmada
+  dentro do Compose) são **artefato existente, implantação não verificada**;
+  **relato do operador (2026-11-14, não verificado independentemente nesta
+  sessão):** logs via `dokploy-vector` aparecem no Grafana Cloud. O Label browser
+  reportado lista `dokploy_application`, `dokploy_environment`,
+  `dokploy_organization`, `dokploy_project`, `dokploy_server`, `dokploy_test`
+  e `service_name`; `service_name=unknown_service`,
+  `dokploy_application=emporio-staging` e
+  `dokploy_environment=production`; `dokploy_service` não é label indexado.
+  O dashboard Loki foi atualizado para o envelope externo JSON e o campo
+  `message` interno. **Relato do operador (2026-11-14, não verificado
+  independentemente):** teste Cloud confirmou snippets, busca Request/
+  Correlation ID API→Radar e ausência de navegação. A conta/stack Grafana Cloud
+  é existente (operador, 2026-11-13: `smallmarzipan1294`, `prod-sa-east-1`,
+  free tier; endpoints/IDs verificados em `estado_atual.md`/`decisoes.md`);
+  provider/agente efetivos, métricas e geração dos tokens não foram verificados
   (`../../docs/staging-compose.md:106-118`; `decisoes.md`).
 - A proteção escolhida para o staging é Cloudflare Access na borda, não Nginx
   Basic Auth. **Existente (2026-11-13):** zona `emporiob2b.com.br` Active na

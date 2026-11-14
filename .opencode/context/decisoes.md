@@ -50,7 +50,7 @@
 | Banco e roles no dev integrado | **Existente — dev:** `postgres → db-bootstrap → migrate → backend`; bootstrap aplica o artefato canônico Infra em read-only e injeta senhas via ambiente; migration é one-shot `emporio_migrador`, runtime é `emporio_app` com `currentSchema` de domínio | Admin, runtime e migration têm credenciais separadas por função; o backend não recebe credenciais admin/migrador. `db-bootstrap` verifica formato (mínimo de 32 caracteres alfanuméricos) e distinção entre as três credenciais, sem imprimir valores (`compose/docker-compose.dev.yml:181-218`; `env/.env.dev.example:21-27`; `database/bootstrap/roles.sql:3-5`). |
 | Coleta local de métricas | Prometheus sem porta publicada, target fixo `10.254.20.10:8081`, scrape a cada 15s e timeout de 5s | O bind do management do Backend ocorre somente na interface de métricas; o IP evita ambiguidade de DNS em container com múltiplas redes. `internal: true` não é firewall contra o host Docker |
 | Limite de isolamento do host | O host Docker pode alcançar diretamente o IP de bridge `10.254.20.10`; não há promessa de firewall nesse caminho | O escopo protege a superfície publicada e o tráfego entre containers; bloquear o host contra a bridge exigiria uma decisão de firewall fora desta camada (`compose/docker-compose.dev.yml:495-522`; `scripts/smoke.sh:63-80`) |
-| Logs da aplicação | **Existente — dev:** Backend em stdout/stderr ECS e containers coletados por Vector→Loki→Grafana local; **planejado — staging/produção:** Dokploy Vector→Grafana Cloud Loki (nível host, sem mudar o Compose) | Separar aplicação de armazenamento/consulta; não gravar arquivos no Backend nem montar Docker socket |
+| Logs da aplicação | **Existente — dev:** Backend em stdout/stderr ECS e containers coletados por Vector→Loki→Grafana local; **planejado — integração staging/produção:** Dokploy Vector→Grafana Cloud Loki (nível host, sem mudar o Compose). **Relato do operador (2026-11-14, não verificado independentemente):** logs observados no Cloud e dashboard Loki testado (snippets LogQL, Request/Correlation ID e ausência de navegação) | Separar aplicação de armazenamento/consulta; não gravar arquivos no Backend nem montar Docker socket |
 
 ## Ambiente de dev/integração
 
@@ -74,29 +74,49 @@
 ## Observabilidade (staging e produção)
 
 - O Grafana Cloud Loki é o destino de staging e produção; a conta/stack é
-  existente (criada pelo operador em 2026-11-13) e a implantação segue
-  planejada. O Dokploy não provisiona Loki: a função
-  `Settings → Logs & Metrics` instala `dokploy-vector` no servidor e envia os
-  logs ao provider configurado.
-- **Existente — métricas de staging, artefato implementado, não implantado
-  (direção aprovada em 2026-11-13):** Prometheus com `remote_write` para
-  Grafana Cloud **dentro do Compose de staging**, com redes internas
-  `metrics-net` (`10.254.30.0/24`) e `radar-metrics-net` (`10.254.31.0/24`)
-  distintas das do dev, `MANAGEMENT_SERVER_ADDRESS` da API em `10.254.30.10`
-  (bind na `metrics-net`, não mais loopback), `METRICS_BIND_ADDRESS`/
-  `METRICS_PORT` no Radar (`10.254.31.30:8082`) e bridge `prometheus-egress`
-  exclusiva. Template sem segredos em
-  `compose/prometheus/prometheus.staging.yml`; token de escrita em File Mount
-  lido via `password_file`, nunca por shell. O Compose liga explicitamente
-  `../files/prometheus.template.yml` e `../files/remote-write-token` aos
-  destinos read-only, assim como `../files/roles.sql` para o bootstrap; cadastro
-  no Dokploy sem referência `volumes:` não monta o arquivo. Os File Paths
-  efetivos no painel e os arquivos em containers não estão confirmados.
-  Validação local do artefato
-  (`config --quiet`, entrypoint na imagem real + `promtool`) passou; deploy na
-  VPS, ingestão real no Grafana Cloud e scrape em runtime seguem pendentes do
-  primeiro deploy/smoke. Importar os dashboards do dev no Grafana Cloud segue
-  pendente de operação.
+  existente (criada pelo operador em 2026-11-13). **Relato do operador
+  (2026-11-14, não verificado independentemente nesta sessão):** logs de
+  staging aparecem no Cloud; os labels reportados incluem
+  `dokploy_application`, `dokploy_environment`, `dokploy_organization`,
+  `dokploy_project`, `dokploy_server`, `dokploy_test` e `service_name`
+  (`unknown_service`). A aplicação reportada é `emporio-staging`, o ambiente
+  `production`, e `dokploy_service` é campo do envelope JSON, não label
+  indexado. **Relato do operador (2026-11-14, não verificado
+  independentemente):** o teste Cloud do dashboard Loki confirmou snippets,
+  busca Request/Correlation ID API→Radar e ausência de navegação. Provider/
+  agente efetivos não foram verificados independentemente. A integração de
+  produção segue planejada. O Dokploy não
+  provisiona Loki: `Settings → Logs & Metrics` instala `dokploy-vector` no
+  servidor e envia os logs ao provider configurado
+  (`../../docs/observability.md:187-216`;
+  `../../compose/grafana/dashboards-staging/emporio-staging-logs.json:18,46,53`).
+- **Existente — artefatos de métricas de staging (direção aprovada em
+  2026-11-13; implantação/configuração não verificadas independentemente):**
+  Prometheus com `remote_write` para Grafana Cloud **dentro do Compose de
+  staging**, com redes internas `metrics-net` (`10.254.30.0/24`) e
+  `radar-metrics-net` (`10.254.31.0/24`), distintas das do dev,
+  `MANAGEMENT_SERVER_ADDRESS` da API em `10.254.30.10` (bind na `metrics-net`,
+  não mais loopback), `METRICS_BIND_ADDRESS`/`METRICS_PORT` no Radar
+  (`10.254.31.30:8082`) e bridge `prometheus-egress` exclusiva. Template sem
+  segredos em `compose/prometheus/prometheus.staging.yml`; token de escrita em
+  File Mount lido via `password_file`, nunca por shell. O Compose liga
+  explicitamente `../files/prometheus.template.yml` e
+  `../files/remote-write-token` aos destinos read-only, assim como
+  `../files/roles.sql` para o bootstrap; cadastro no Dokploy sem referência
+  `volumes:` não monta o arquivo. Os File Paths efetivos no painel e os arquivos
+  em containers não estão confirmados.
+  Validação local do artefato (`config --quiet`, entrypoint na imagem real +
+  `promtool`) passou; deploy na VPS e scrape local de runtime não foram
+  verificados independentemente. Existem dashboards Loki/Prometheus de staging
+  em `compose/grafana/dashboards-staging/`
+  (`docs/observability.md:180-238`). **Relato do operador (2026-11-14, não
+  verificado independentemente):** importou/testou no Grafana Cloud o dashboard
+  de métricas expandido (35 painéis/84 expressões), suas consultas e as séries
+  disponíveis; não se afirma quais painéis/valores específicos passaram.
+  Permanecem pendentes scrape/runtime local de staging e verificação
+  independente da ingestão/configuração Cloud. As 84 expressões passaram
+  `promtool check rules`; Grafana 12 descartável aceitou a importação via API
+  (HTTP 200).
 - **Existente — conta/stack Grafana Cloud (2026-11-13, operador):** slug
   `smallmarzipan1294`, região `prod-sa-east-1` (São Paulo), free tier; Access
   Policies `emporio-staging-logs` (`logs:write`) e `emporio-staging-metrics`
@@ -112,14 +132,14 @@
   valores verificados de `PROMETHEUS_REMOTE_WRITE_URL/USERNAME` e documenta o
   provider Loki (URL/user; token somente no painel); `docker compose config
   --quiet` com o example vigente exit 0.
-- **Planejado — implantação dos logs de staging:** stdout dos containers →
+- **Contrato de logs staging:** stdout dos containers →
   `json-file` com rotação (buffer local; driver proposital para o agente do
   Dokploy, não `fluentd` como no dev) → `dokploy-vector` no host → push HTTPS
   → Grafana Cloud Loki, sem mudar o Compose e sem porta inbound; métricas
-  também push (`remote_write`). O provider Grafana Loki ainda não foi
-  configurado no Dokploy; destino: URL Loki + tenant `1878826` + token
-  `logs:write` no provider, URL remote_write + instance `3766316` nas envs do
-  Compose, token `metrics:write` no File Mount
+  também push (`remote_write`). Estado/configuração efetivos do provider e do
+  agente não foram auditados nesta sessão. Destino: URL Loki + tenant
+  `1878826` + token `logs:write` no provider, URL remote_write + instance
+  `3766316` nas envs do Compose, token `metrics:write` no File Mount
   `/etc/prometheus/remote-write-token`
   (`compose/docker-compose.staging.yml:24-28`,
   `../../docs/observability.md:161-185,192-197`).
@@ -168,5 +188,5 @@ Cloudflare, Dokploy, GitHub):
 | Casa da infra | Novo repo **`EmporioB2B/Infra`** (pasta `infra/` ao lado dos projetos) | A raiz do workspace não é repo; os 4 projetos são independentes |
 | `.opencode` | Só `context/`, `skills/` e `tasks/` (+ `agents/` desde o refinamento) | Infra é governança, não app |
 | `tasks/futuras/` | **Não versionado** — local, pessoal do operador (revogação de 2026-09-26 da exceção que o mantinha no git; convenção igual à dos repos de aplicação) | Decisão explícita do operador ao comitar; `tasks/passadas/` continua versionado como histórico/evidência imutável |
-| Permissões do agente arquiteto | Padrão `allow` em bash/edição no dev; interdição só onde git não desfaz: mutações de git, destruição de dados (volume/prune/`down -v`/`DROP/TRUNCATE`), SSH/VPS, `sudo` | Operador 2026-09-26: "você deve poder executar basicamente qualquer comando docker e de criação dentro do repositório; no fim, teremos sempre o git". A ressalva dos volumes é evidência própria (down -v de 2026-09-26) |
+| Permissões do agente arquiteto | Padrão `allow` em bash/edição no dev; mutações de Git, destruição irreversível, SSH/VPS e `sudo` genérico interditados. Exceções somente via `sudo -n docker ps`, `docker stats --no-stream` e `docker logs --since ...` (read-only de observabilidade) | Operador 2026-09-26: Docker amplo em dev, mas operações não reversíveis seguem bloqueadas. Operador 2026-11-14 autorizou leitura limitada de logs e métricas da VPS; as permissões não autorizam ação em VPS/produção sem autorização explícita por ação. Docker group/socket continua equivalente a privilégio root |
 | Rascunho da raiz | `docker-compose.yml` da raiz do workspace (nome `ifra-vps`) **aposentado** após a TASK-INFRA-001 | Envs não batem com o código real; healthcheck errado; mantido só até o dev compose validar |

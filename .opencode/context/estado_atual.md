@@ -66,14 +66,17 @@ Fotografia factual vigente. Não é cronologia de tasks.
   não verificado independentemente nesta sessão:** associação Custom Domain R2
   `media-staging.emporiob2b.com.br` e asset do logo funcionais; não houve acesso
   a Cloudflare/R2/VPS nem validação de deploy nesta auditoria.
-  **Relato do operador, não verificado nesta sessão —
-  staging funcional:** esta sessão não acessou VPS/staging nem confirmou deploy,
-  saúde ou funcionamento. **Existente — borda
+  **Relato do operador, não verificado independentemente nesta sessão:**
+  staging funcional. O operador também mostrou logs de API/Front do stack no
+  Grafana Cloud; isso comprova que alguns containers produziram logs recebidos,
+  mas não confirma saúde integral, rotas ou o estado do deploy. **Existente — borda
    Cloudflare de staging (2026-11-13):** zona `emporiob2b.com.br` Active
   (NS `dora`/`gannon.ns.cloudflare.com`); túnel remotamente gerenciado
   `emporio-staging` (`87a7e326-bc1b-43fb-9091-212fa38e0fdb`) criado no
-  dashboard da conta dona da zona, status Inactive esperado — o connector
-  ainda não está implantado na VPS e liga via compose/Dokploy no deploy.
+  dashboard da conta dona da zona. No último estado verificado (2026-11-13), o
+  connector estava Inactive e ainda não implantado na VPS; deveria ligar via
+  compose/Dokploy no deploy. O relato posterior de logs Cloud não confirma seu
+  estado atual.
   **Verificado (2026-11-13, `dig`/`curl` públicos):** DNS de
   `staging.emporiob2b.com.br` e `api-staging.emporiob2b.com.br` na borda
   Cloudflare (`188.114.96.2`/`188.114.97.2`, proxied) e Access interceptando
@@ -95,16 +98,17 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `/bootstrap/roles.sql`, `/etc/prometheus/prometheus.template.yml` e
   `/etc/prometheus/remote-write-token`. Render/topologia validado com
   `docker compose config` e inspeção dos mounts; isso não comprova arquivos
-  existentes no Dokploy nem implantação. O File Mount anteriormente informado
-  pelo operador tinha UI `File Path /bootstrap/roles.sql`, `Mount Path /`;
-  mapeamentos finais da UI não foram confirmados. Os File Paths devem produzir
-  os nomes exatos sob `../files/`; confirmar presença nos containers e rerodar
-  deploy/smoke. Fonte: `compose/docker-compose.staging.yml:63-65,322-325`,
-  `../../docs/staging-compose.md:32-51`. Provider Loki no Dokploy
-  (conta/stack Grafana Cloud existente — bullet próprio abaixo), envs de
-   métricas no painel (valores verificados no example), valores reais,
-  primeiro login Access, connector no deploy e deploy/smoke permanecem gates
-  de TASK-INFRA-021. Ver
+  existentes no Dokploy. O File Mount anteriormente informado pelo operador
+  tinha UI `File Path /bootstrap/roles.sql`, `Mount Path /`; mapeamentos finais
+  da UI e arquivos presentes nos containers não foram confirmados. Os File Paths
+  devem produzir os nomes exatos sob `../files/`. Fonte:
+  `compose/docker-compose.staging.yml:63-65,322-325`,
+  `../../docs/staging-compose.md:32-51`.
+  **Relato posterior do operador:** logs de API/Front aparecem no Grafana Cloud;
+  provider/agente e labels ainda não foram auditados independentemente. Env de
+  métricas no painel (nomes e URLs não secretos verificados no example), valores
+  reais, primeiro login Access, connector e saúde integral/deploy/smoke não
+  foram verificados nesta sessão. Ver
   [`../../docs/staging-contract.md`](../../docs/staging-contract.md).
 - **Existente — conta/stack Grafana Cloud (2026-11-13, criada pelo operador):**
   slug `smallmarzipan1294`, região `prod-sa-east-1` (São Paulo), free tier.
@@ -122,23 +126,36 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `*-local-nlb.internal.grafana.net`, que não servem para ingestão externa;
   os endpoints públicos acima são os corretos. Destino: URL Loki + tenant
   `1878826` + token `logs:write` → provider Grafana Loki no Dokploy
-  (`Settings → Logs & Metrics`, ainda não configurado; instala
-  `dokploy-vector`, push HTTPS outbound); URL remote_write + instance
+  (`Settings → Logs & Metrics`, última verificação em 2026-11-13 indicava
+  não configurado; o relato mais recente do operador está abaixo); URL
+  remote_write + instance
   `3766316` → envs do Compose de staging; token `metrics:write` → File Mount
   `/etc/prometheus/remote-write-token`. **Existente — example atualizado:**
   `env/.env.staging.example:74-86` contém os valores verificados de
   `PROMETHEUS_REMOTE_WRITE_URL/USERNAME` (não secretos) e comentários com a
   URL/user do provider Loki e o destino dos tokens (somente painel/File
   Mount); `docker compose config --quiet` com o example vigente exit 0.
-  Pendentes: geração dos tokens, provider no Dokploy, envs/File Mounts no
-  painel e deploy/ingestão real.
+  **Relato do operador (2026-11-14, não verificado independentemente nesta
+  sessão):** logs de staging aparecem no Grafana Cloud. O Label browser reportado
+  lista `dokploy_application`, `dokploy_environment`,
+  `dokploy_organization`, `dokploy_project`, `dokploy_server`, `dokploy_test`
+  e `service_name`; `service_name=unknown_service`,
+  `dokploy_application=emporio-staging` e
+  `dokploy_environment=production`. `dokploy_service` não é label indexado;
+   o envelope externo é JSON com `message` contendo JSON interno. **Relato do
+   operador (2026-11-14):** confirmou no Cloud os snippets LogQL, a busca por
+   Request/Correlation ID API→Radar e que os gráficos não navegam. Provider/
+   agente e ingestão de métricas não foram verificados independentemente nesta
+   sessão.
 - **Plano aprovado — hosting:** staging primeiro; produção futura dividirá a
-  mesma VPS por não haver outra máquina. Stacks, redes e segredos separados não
-  formam uma fronteira forte de segurança. Cloudflare Access de staging
-  configurado na borda e interceptando os dois hostnames (302 verificado em
-  2026-11-13); túnel `emporio-staging` criado no dashboard, connector ainda
-  não ligado na VPS (Inactive esperado até o deploy); primeiro login Access
-  pendente; aplicações não implantadas.
+   mesma VPS por não haver outra máquina. Stacks, redes e segredos separados não
+   formam uma fronteira forte de segurança. Cloudflare Access de staging
+   configurado na borda e interceptando os dois hostnames (302 verificado em
+   2026-11-13); túnel `emporio-staging` criado no dashboard. Último estado do
+   connector verificado em 2026-11-13: Inactive, ainda não ligado na VPS.
+   Operador posteriormente mostrou logs da API/Front no Grafana Cloud, mas isso
+   não comprova o connector, o túnel público ou saúde integral. Primeiro login
+   Access segue sem evidência independente nesta sessão.
 - **Planejado — contrato CI/CD das aplicações:** `docs/cicd.md` determina gate de testes e
   publicação GHCR multiarch `linux/amd64,linux/arm64` por SHA completo em
   `main`; `latest` é opcional e não seleciona deploy. Deploy de staging é
@@ -577,32 +594,88 @@ Fotografia factual vigente. Não é cronologia de tasks.
   pin de imagem por sha no Dokploy. A integração de produção com Grafana Cloud
   Loki permanece planejada: o Dokploy configura o provider e instala
   `dokploy-vector`; nenhum Loki/Grafana entra no Compose da aplicação.
-  **Planejado — implantação dos logs de staging:** stdout dos containers →
-  driver `json-file` com rotação (buffer local; proposital para o agente do
-  Dokploy, não `fluentd` como no dev) → `dokploy-vector` no host → push HTTPS
-  → Grafana Cloud Loki, sem mudar o Compose e sem porta inbound. A conta/stack
-  Grafana Cloud é existente (bullet próprio em "O que existe"); o provider
-  Grafana Loki ainda não foi configurado no Dokploy e a geração dos tokens
-  não está confirmada (`compose/docker-compose.staging.yml:24-28`,
-  `../../docs/observability.md:161-185,192-197`). **Existente — métricas de staging,
-  artefato implementado, não implantado (direção aprovada em 2026-11-13):**
-  o Compose de staging contém o serviço `prometheus` com `remote_write` para
-  Grafana Cloud, redes internas `metrics-net` (`10.254.30.0/24`) e
-  `radar-metrics-net` (`10.254.31.0/24`) distintas das do dev,
-  `MANAGEMENT_SERVER_ADDRESS` da API em `10.254.30.10` (bind na `metrics-net`,
-  não mais loopback), `METRICS_BIND_ADDRESS`/`METRICS_PORT` no Radar
-  (`10.254.31.30:8082`) e bridge `prometheus-egress` exclusiva; template sem
-  segredos em `compose/prometheus/prometheus.staging.yml` (File Mount no
-  deploy). Importar os dashboards do dev no Grafana Cloud segue pendente de
-  operação. Validação local do artefato: `docker compose config --quiet`
-  exit 0, entrypoint executado na imagem real com valores fictícios e
-  `promtool check config` SUCCESS; deploy na VPS, ingestão real no Grafana
-  Cloud e scrape em runtime não provados — pendentes do primeiro deploy/smoke
-  (`compose/docker-compose.staging.yml:295-342,366-392`,
-  `../../docs/staging-compose.md:51-80`). Ressalva: os tetos de 2 CPU/12 GiB
-  por stack são limites, não reservas — a soma (24 GiB) não deixa folga de
-  sistema se ambos os stacks estourarem simultaneamente; monitorar a folga
-  real do host antes da produção entrar.
+- **Relato do operador — logs de staging (2026-11-14, não verificado
+   independentemente nesta sessão):** logs aparecem no Grafana Cloud. O operador
+   reporta Label browser com labels indexados
+   `dokploy_application`, `dokploy_environment`, `dokploy_organization`,
+   `dokploy_project`, `dokploy_server`, `dokploy_test` e `service_name`;
+   `service_name=unknown_service`, `dokploy_application=emporio-staging` e
+   `dokploy_environment=production`. `dokploy_service` não é label indexado.
+   O envelope externo é JSON com metadata e `message` contendo JSON interno.
+   Provider/agente efetivos e tokens não foram verificados independentemente
+   (`compose/docker-compose.staging.yml:24-28`,
+   `../../docs/observability.md:161-216`).
+ - **Existente — dashboard Loki de staging (artefato versionado; interação
+   reportada pelo operador, não verificada independentemente):** fixa o filtro pelo
+  label de aplicação, parseia envelope, filtra `dokploy_service` extraído,
+  formata `message` e parseia JSON interno. Os seletores `service`, `level` e
+  `statusClass` são estáticos; serviço inclui `api`, `front`, `radar`, `postgres`,
+  `db-bootstrap`, `migrate`, `cloudflared` e `prometheus`; nível inclui
+  ERROR/WARN/INFO/DEBUG e status inclui All/4xx/5xx. A consulta usa `log_level`
+  para API/Front e `level` para Radar. O Front emite `log.level`; conforme
+  comportamento documentado do parser JSON Loki, pontos em nomes de campos são
+   sanitizados para `_`, então `log_level` é o nome esperado. **Relato do
+   operador (2026-11-14):** testou no Cloud as consultas/snippets de API/Front e
+   Radar; resultado não reproduzido independentemente nesta sessão.
+    **Existente no JSON (versão 7):** não há data links. O painel Text/Code
+    interpola os dropdowns `service`, `level` e `statusClass` nos snippets
+    LogQL, incluindo um snippet para `requestId`, para cópia manual no Explore.
+    Clicar em um ponto não gera nem copia uma query específica. Uma variável
+    textbox `requestId` e painel
+   de logs fazem parse do envelope e de `message`, filtrando o valor digitado
+   contra `request_id` ou `correlation_id`. Backend `CorrelationIdFilter`
+   registra `X-Request-Id` no MDC; `RestClientRadarHttpClient` propaga esse
+   `request_id` como `X-Correlation-ID`; Radar aceita-o em
+   `problem_details.correlation_id` e grava `correlation_id` no JSONL. O
+   interceptor do browser Front gera um ID por request; `server.ts` SSR
+   lê/gera ID para a requisição SSR. Não equiparar esse ID ao ID de uma chamada
+   de API nem presumir que componham a mesma cadeia. O dashboard trata esses IDs como campos do corpo, não os configura
+   como labels Loki. O Label browser reportado pelo operador não inclui IDs,
+    mas o estado atual no Cloud não foi verificado independentemente. **Relato
+    do operador (2026-11-14):** confirmou expansão/cópia dos snippets, busca por
+    ID da cadeia API→Radar e ausência de navegação nos gráficos; esse resultado
+     não foi reproduzido independentemente nesta sessão.
+   (`docs/observability.md:187-216,246-253`;
+   `compose/grafana/dashboards-staging/emporio-staging-logs.json:90-240,247-302`;
+   `../Backend_Java/src/main/java/br/com/emporio/infrastructure/security/CorrelationIdFilter.java:21,36`;
+   `../Backend_Java/src/main/java/br/com/emporio/infrastructure/radar/http/RestClientRadarHttpClient.java:412-416`;
+   `../Radar_Middleware_Python/src/radar_middleware/api/problem_details.py:30-45`;
+   `../Radar_Middleware_Python/src/radar_middleware/infrastructure/observability/logging_setup.py:135-146`;
+   `../Front_Angular/src/app/core/http/correlation-id.interceptor.ts:4-15`;
+   `../Front_Angular/src/server.ts:57-61`).
+ - **Existente — métricas de staging, artefatos implementados; implantação não
+    verificada:** o Compose de staging contém Prometheus com `remote_write` para
+    Grafana Cloud, redes internas `metrics-net` (`10.254.30.0/24`) e
+    `radar-metrics-net` (`10.254.31.0/24`), distintas do dev, management da API
+    em `10.254.30.10`, Radar em `10.254.31.30:8082` e bridge
+    `prometheus-egress`; o template de scrape é
+    `compose/prometheus/prometheus.staging.yml`. O dashboard versionado atual
+     contém 35 painéis/84 expressões nos jobs API e Radar. As 84 expressões
+      passaram `promtool check rules`; Grafana 12 descartável aceitou esta versão
+      por importação via API (HTTP 200). **Relato do operador (2026-11-14, não
+      verificado independentemente):** importou/testou no Grafana Cloud o
+      dashboard expandido, suas consultas e as séries disponíveis; não se afirma
+      quais painéis/valores específicos passaram. Permanecem pendentes
+      scrape/runtime local de staging e verificação independente da
+      ingestão/configuração Cloud. API expõe heap
+    JVM agregada (não RSS/container) e CPU do processo JVM; Radar expõe CPU,
+    RSS e memória virtual do processo. Métricas cgroup/container não estão
+    disponíveis e cAdvisor está fora do escopo. Backend Java não tem buckets
+    de duração, portanto seus painéis usam média/máximo, não percentis; somente
+    os histogramas do Radar permitem p50/p95. O escopo exclui Front, Postgres,
+    cloudflared e host. RED e métricas de domínio podem depender de tráfego;
+    `up` é scrape, readiness só é exposta pelo Radar. Fontes:
+    `compose/grafana/dashboards-staging/emporio-staging-metrics.json:41-90,164-220,309-345,1157-1233,1279-1316,1440-1472,1650-1676`,
+    `compose/prometheus/prometheus.staging.yml:14-44`,
+    `../Radar_Middleware_Python/src/radar_middleware/infrastructure/observability/prometheus.py:72-165,174-187,240-248`,
+    `../Backend_Java/src/main/java/br/com/emporio/infrastructure/config/MetricsConfiguration.java:114-127,284-298`,
+    `../Backend_Java/src/main/java/br/com/emporio/infrastructure/observability/HttpMetricsFilter.java:45-47,97-106`,
+      `docs/observability.md:224-243`. A validação de config/compose existente
+      não prova deployment; deploy na VPS e verificação independente da
+      ingestão/configuração Cloud seguem pendentes. Ressalva: os tetos de 2 CPU/12 GiB por
+    stack não reservam folga se ambos os stacks estourarem simultaneamente
+    (`compose/docker-compose.staging.yml:295-342,366-392`,
+    `../../docs/staging-compose.md:51-80`).
 - **Existente — contrato e artefatos de staging:** contrato, Compose
   `compose/docker-compose.staging.yml` (incluindo o Prometheus de métricas),
   template `compose/prometheus/prometheus.staging.yml`, env example e runbooks
@@ -639,8 +712,10 @@ Fotografia factual vigente. Não é cronologia de tasks.
   em "O que existe" e em `vps_oracle.md`. PG17 e roles separadas, assim como
   URLs são o desenho aprovado; buckets e credenciais Back/Radar/SMTP seguem
   sem provisionamento independentemente confirmado nesta auditoria.
-  O Dokploy está instalado, mas nenhum ambiente de aplicação está
-  implantado; MFA do painel foi adiado com exceção aceita (TASK-INFRA-022).
+   O Dokploy está instalado. O operador mostrou logs de API/Front associados ao
+   stack staging no Grafana Cloud, mas o deploy integral e o estado em runtime
+   não foram auditados independentemente; MFA do painel foi adiado com exceção
+   aceita (TASK-INFRA-022).
   Produção na mesma máquina continua futura e requer revisão explícita de
   recursos/isolamento (`docs/oracle-vps.md:12-20,83-91`;
   `tasks/passadas/20261112_TASK-INFRA-018-hardening-dokploy-excecao-mfa.md`;

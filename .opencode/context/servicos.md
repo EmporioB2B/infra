@@ -619,8 +619,9 @@ O Radar **existente — dev** não é emulado: usa o R2 de teste real (restriç�
   como no dev) → `dokploy-vector` → push HTTPS outbound, sem porta inbound
   (`compose/docker-compose.staging.yml:24-28`,
   `../../docs/observability.md:161-185,192-197`).
-- **Existente — staging, artefato implementado, não implantado (direção
-  aprovada em 2026-11-13):** o serviço `prometheus` do Compose de staging usa
+- **Existente — artefato de métricas staging, implantação/configuração não
+  verificadas independentemente (direção aprovada em 2026-11-13):** o serviço
+  `prometheus` do Compose de staging usa
   `${PROMETHEUS_IMAGE}` (example:
   `prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996`,
   digest verificado no Docker Hub), sem porta publicada, web em
@@ -647,10 +648,94 @@ O Radar **existente — dev** não é emulado: usa o R2 de teste real (restriç�
   destino Grafana Cloud `smallmarzipan1294`; o token `metrics:write` vai
   somente no File Mount e não tem geração confirmada. Validação local:
   `config --quiet` exit 0 com o example vigente, entrypoint na imagem real
-  com valores fictícios + `promtool check config` SUCCESS; deploy na VPS,
-  ingestão real no Grafana Cloud e
-  scrape em runtime não provados — pendentes do primeiro deploy/smoke.
-  Dashboards do dev importados no Grafana Cloud seguem pendentes de operação.
+  com valores fictícios + `promtool check config` SUCCESS; deploy na VPS e
+  scrape local de runtime não verificados. **Relato do operador (2026-11-14):**
+  testou no Grafana Cloud o dashboard e as séries disponíveis; provider,
+  configuração da ingestão e origem dos dados não auditados independentemente.
+  **Existente — dashboard Loki de staging (artefato versionado; interação
+  reportada pelo operador, não verificada independentemente):** `compose/grafana/dashboards-staging/emporio-staging-logs.json`
+  fixa o selector no label indexado `dokploy_application="emporio-staging"`,
+  faz parse do envelope JSON, filtra o campo extraído `dokploy_service`,
+  aplica `line_format` em `message` e parseia o JSON interno. `dokploy_service`
+  não é label indexado; as opções de serviço são estáticas (api, front, radar,
+  postgres, db-bootstrap, migrate, cloudflared, prometheus). A consulta usa
+   `log_level` para API/Front e `level` para Radar. O Front emite o campo JSON
+   literal `log.level`; conforme comportamento documentado do parser JSON Loki,
+   pontos em nomes de campos são sanitizados para `_`, então `log_level` é o
+   nome esperado. **Relato do operador (2026-11-14):** snippets LogQL e busca
+   Request/Correlation ID testados no Grafana Cloud; runtime/provider não
+   verificados independentemente. Os seletores `service`,
+   `level` e `statusClass` são estáticos; `statusClass` oferece All, 4xx (`4..`)
+   e 5xx (`5..`). **Existente no JSON (versão 7):** nenhum data link está
+   configurado. O painel Text/Code **Consultas LogQL para copiar no Explore**
+   interpola os dropdowns `service`, `level` e `statusClass` nos snippets;
+   também inclui snippet para `requestId`. A consulta é copiável manualmente
+   para o Explore. Clicar em um ponto não gera nem copia uma query específica.
+   **Existente no artefato:** há variável textbox `requestId` e painel de logs
+   que faz parse do envelope, formata `message`, faz parse do JSON interno e
+   filtra o texto digitado contra `request_id` ou `correlation_id`.
+    Isso descreve a configuração. **Relato do operador (2026-11-14):** no
+    Grafana Cloud confirmou snippets, busca Request/Correlation ID API→Radar e
+    ausência de navegação; não foi verificado independentemente nesta sessão.
+  Backend `AccessLogFilter` e Front `server-logger.ts` emitem eventos de acesso
+  com método/path sanitizado/status/duração; esses dados ficam no corpo,
+  não em labels de stream. Outros containers são exibidos sem pressupor nível
+  estruturado. As consultas agregam por `dokploy_service` extraído, não por
+  label de stream. O dashboard filtra IDs/status como campos, não os configura
+  como labels Loki. O Label browser reportado não inclui IDs, mas não houve
+  verificação independente do estado atual no Cloud. O `CorrelationIdFilter` registra
+  `X-Request-Id` no MDC;
+  `RestClientRadarHttpClient` propaga o `request_id` do MDC como
+  `X-Correlation-ID`, que o Radar aceita como
+  `problem_details.correlation_id` e grava como `correlation_id` no JSONL.
+  O interceptor browser do Front gera um ID por request; `server.ts` SSR
+  lê/gera ID para a requisição SSR. Não equiparar esse ID ao ID de uma chamada
+  de API nem presumir que componham a mesma cadeia. Os IDs são consultados como
+  campos do corpo, **não labels configuradas
+  pelo dashboard**. Fontes:
+  `../Backend_Java/src/main/java/br/com/emporio/infrastructure/security/CorrelationIdFilter.java`,
+  `../Backend_Java/src/main/java/br/com/emporio/infrastructure/radar/http/RestClientRadarHttpClient.java`,
+  `../Radar_Middleware_Python/src/radar_middleware/api/problem_details.py:30-45`,
+  `../Radar_Middleware_Python/src/radar_middleware/infrastructure/observability/logging_setup.py:135-146`,
+  `../Front_Angular/src/app/core/http/correlation-id.interceptor.ts:4-15`,
+  `../Front_Angular/src/server.ts:57-61`.
+  **Relato do operador (2026-11-14, não verificado independentemente nesta
+  sessão):** logs aparecem no Grafana Cloud; o Label browser reportado lista
+  `dokploy_application`, `dokploy_environment`, `dokploy_organization`,
+  `dokploy_project`, `dokploy_server`, `dokploy_test` e `service_name`;
+  `service_name=unknown_service`, aplicação `emporio-staging` e ambiente
+  `production`. O operador também reporta envelope JSON externo com
+  `message` contendo JSON interno. Provider/agente, labels e ingestão não foram
+  verificados independentemente nesta sessão.
+  **Existente — artefato do dashboard (não prova de execução):** o JSON
+  `emporio-staging-metrics.json` atualmente contém 35 painéis e 84 expressões
+  PromQL nos jobs `emporio-backend`/`emporio-radar`, ambos com
+  `environment=staging`.
+  Abrange RED, runtime e grupos de operação/domínio que já são expostos pelos
+  dois serviços; séries de domínio dependem de tráfego/uso. API: heap agregada
+  da JVM (não RSS/container) e `process_cpu_usage` do processo JVM; Radar:
+  `process_cpu_seconds_total` e RSS/memória virtual do processo, não métricas
+  de cgroup/container. CPU/RAM de container estão ausentes; cAdvisor está fora
+  do escopo. O dashboard não cobre Front, Postgres, cloudflared ou host.
+   Backend Java não expõe buckets de duração: somente médias e máximos onde
+   disponíveis, nunca p50/p95; os histogramas do Radar com buckets permitem
+   p50/p95. As 84 expressões passaram `promtool check rules`; Grafana 12
+   descartável aceitou esta versão por importação HTTP (200). **Relato do
+   operador (2026-11-14, não verificado independentemente):** importou/testou no
+   Grafana Cloud o dashboard expandido, suas consultas e as séries disponíveis;
+   não se afirma quais painéis/valores específicos passaram. Permanecem
+   pendentes scrape/runtime local de staging e verificação independente da
+   ingestão/configuração Cloud.
+  `up` mede scrape, não disponibilidade pública ou readiness da API; readiness
+  `radar_health_ready` é específica do Radar.
+  (`compose/grafana/dashboards-staging/emporio-staging-metrics.json:41-90,164-220,309-345,1157-1233,1279-1316,1440-1472,1650-1676`,
+  `compose/prometheus/prometheus.staging.yml:14-44`,
+  `../Backend_Java/src/main/java/br/com/emporio/infrastructure/config/MetricsConfiguration.java:114-127,284-298`,
+  `../Backend_Java/src/main/java/br/com/emporio/infrastructure/observability/HttpMetricsFilter.java:45-47,97-106`,
+  `../Radar_Middleware_Python/src/radar_middleware/infrastructure/observability/prometheus.py:72-165,174-187,240-248`).
+  Fontes do código de logs: `../Backend_Java/src/main/java/br/com/emporio/infrastructure/observability/AccessLogFilter.java:38-46`,
+  `../Front_Angular/src/server/observability/server-logger.ts:96-110,156-181`,
+  `../Radar_Middleware_Python/src/radar_middleware/infrastructure/observability/logging_setup.py:135-163,221-231`.
   Ressalva: tetos de 2 CPU/12 GiB por stack não reservam folga de sistema se
   ambos os stacks estourarem simultaneamente — monitorar a folga real do host
   antes da produção entrar

@@ -59,6 +59,14 @@ permission:
     "git describe*": "allow"
     # --- Privilégio de sistema e acesso externo: fechados (produção/VPS).
     "sudo *": "deny"
+    # Exceções estritamente read-only para observabilidade na VPS:
+    # inventariar containers, coletar snapshot de recursos e ler logs recentes.
+    # Não liberar docker inspect/exec/compose nem sudo genérico.
+    "sudo -n docker ps*": "allow"
+    "sudo -n docker stats --no-stream": "allow"
+    "sudo -n docker stats --no-stream *": "allow"
+    "sudo -n docker logs --since *": "allow"
+    "sudo -n docker logs --since=*": "allow"
     "ssh *": "deny"
     "scp *": "deny"
     "rsync *": "deny"
@@ -154,6 +162,24 @@ memória, nunca do rascunho aposentado da raiz do workspace.
   política: `down -v/--volumes/--rmi`, família `prune`, `docker volume rm`,
   `dropdb`, `DROP/TRUNCATE` — evidência: um `down -v` meu em 2026-09-26
   perdeu três volumes de dev que nenhum commit traria de volta.
+
+## Observabilidade na VPS — exceção limitada
+
+- As únicas exceções a `sudo *` para observabilidade usam `sudo -n` e são
+  `docker ps`, `docker stats --no-stream` e `docker logs --since ...`. Elas
+  permitem inventário de containers, snapshot de CPU/memória e logs recentes;
+  não autorizam `sudo` para outros comandos. Se o sudo exigir senha, o comando
+  falha sem prompt; não tentar remover `-n` nem pedir/copiar senha.
+- Não usar `sudo docker inspect` (pode expor envs/segredos), `sudo docker exec`,
+  `docker compose` via sudo, nem outros comandos privilegiados.
+- `docker stats` fornece somente métricas de recursos dos containers (CPU,
+  memória, I/O, rede e PIDs); não equivale a PromQL da aplicação. Não liberar
+  `docker exec` para consultar Prometheus, pois permitiria comandos arbitrários
+  dentro do container e poderia expor o File Mount de escrita.
+- Esta permissão não é autorização para consultar a VPS/produção: continua
+  necessária autorização explícita do operador para cada ação em VPS/produção.
+- Tratar logs como dados potencialmente sensíveis: limitar a janela/linhas,
+  nunca devolver valores de segredos, tokens, cookies, headers de auth ou PII.
 
 ## Ciclo de trabalho
 

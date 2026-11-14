@@ -1,0 +1,319 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_LOKI",
+      "label": "Grafana Cloud Loki",
+      "description": "Datasource Loki do staging",
+      "type": "datasource",
+      "pluginId": "loki",
+      "pluginName": "Loki"
+    }
+  ],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "12.0.0" },
+    { "type": "panel", "id": "logs", "name": "Logs", "version": "" },
+    { "type": "datasource", "id": "loki", "name": "Loki", "version": "" }
+  ],
+  "annotations": { "list": [] },
+  "description": "Logs do stack emporio-staging. dokploy_service e nível são extraídos do JSON do evento, não são labels indexados do Loki.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "description": "Serviço e nível são extraídos do JSON externo e do message JSON interno. O filtro de nível aplica-se aos logs estruturados da API/Front e Radar.",
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "editorMode": "code",
+          "expr": "{dokploy_application=\"emporio-staging\"} | json | dokploy_service=~\"(api|front)\" | dokploy_service=~\"${service:raw}\" | line_format \"{{.message}}\" | json | log_level=~\"(?i)(${level:raw})\" | status=~\"${statusClass:raw}\"",
+          "queryType": "range",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "editorMode": "code",
+          "expr": "{dokploy_application=\"emporio-staging\"} | json | dokploy_service=\"radar\" | dokploy_service=~\"${service:raw}\" | line_format \"{{.message}}\" | json | level=~\"(?i)(${level:raw})\"",
+          "queryType": "range",
+          "refId": "B"
+        }
+      ],
+      "title": "Logs da aplicação — API, Front e Radar",
+      "type": "logs"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "description": "Containers sem formato de nível estruturado uniforme; exibe a mensagem original sem filtrar por nível.",
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "id": 2,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "editorMode": "code",
+          "expr": "{dokploy_application=\"emporio-staging\"} | json | dokploy_service!~\"api|front|radar\" | dokploy_service=~\"${service:raw}\" | line_format \"{{.message}}\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Logs brutos dos demais containers",
+      "type": "logs"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "id": 3,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "editorMode": "code",
+          "expr": "sum by (dokploy_service) (count_over_time({dokploy_application=\"emporio-staging\"} | json | dokploy_service=~\"(api|front)\" | dokploy_service=~\"${service:raw}\" | line_format \"{{.message}}\" | json | log_level=~\"(?i)(error|fatal|critical)\"[$__interval]))",
+          "legendFormat": "{{dokploy_service}}",
+          "queryType": "range",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "editorMode": "code",
+          "expr": "sum by (dokploy_service) (count_over_time({dokploy_application=\"emporio-staging\"} | json | dokploy_service=\"radar\" | dokploy_service=~\"${service:raw}\" | line_format \"{{.message}}\" | json | level=~\"(?i)(error|fatal|critical)\"[$__interval]))",
+          "legendFormat": "{{dokploy_service}}",
+          "queryType": "range",
+          "refId": "B"
+        }
+      ],
+      "title": "Eventos ERROR/FATAL/CRITICAL por serviço",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "id": 4,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "editorMode": "code",
+          "expr": "sum by (dokploy_service) (count_over_time({dokploy_application=\"emporio-staging\"} | json | dokploy_service=~\"(api|front)\" | dokploy_service=~\"${service:raw}\" | line_format \"{{.message}}\" | json | log_level=~\"(?i)(warn|warning)\"[$__interval]))",
+          "legendFormat": "{{dokploy_service}}",
+          "queryType": "range",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "editorMode": "code",
+          "expr": "sum by (dokploy_service) (count_over_time({dokploy_application=\"emporio-staging\"} | json | dokploy_service=\"radar\" | dokploy_service=~\"${service:raw}\" | line_format \"{{.message}}\" | json | level=~\"(?i)(warn|warning)\"[$__interval]))",
+          "legendFormat": "{{dokploy_service}}",
+          "queryType": "range",
+          "refId": "B"
+        }
+      ],
+      "title": "Eventos WARN por serviço",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "id": 5,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "editorMode": "code",
+          "expr": "sum by (dokploy_service, status_class) (count_over_time({dokploy_application=\"emporio-staging\"} | json | dokploy_service=~\"(api|front)\" | dokploy_service=~\"${service:raw}\" | line_format \"{{.message}}\" | json | status=~\"4..\" | label_format status_class=\"4..\" | status_class=~\"${statusClass:raw}\"[$__interval]))",
+          "legendFormat": "{{dokploy_service}}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Respostas HTTP 4xx (API e Front)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "id": 6,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "editorMode": "code",
+          "expr": "sum by (dokploy_service, status_class) (count_over_time({dokploy_application=\"emporio-staging\"} | json | dokploy_service=~\"(api|front)\" | dokploy_service=~\"${service:raw}\" | line_format \"{{.message}}\" | json | status=~\"5..\" | label_format status_class=\"5..\" | status_class=~\"${statusClass:raw}\"[$__interval]))",
+          "legendFormat": "{{dokploy_service}}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Respostas HTTP 5xx (API e Front)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "description": "Cole request_id de um evento da API ou correlation_id do Radar. O Backend propaga o mesmo valor para o Radar; o filtro fica no corpo do evento, nunca como label Loki.",
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 36 },
+      "id": 7,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "editorMode": "code",
+          "expr": "{dokploy_application=\"emporio-staging\"} | json | line_format \"{{.message}}\" | json | (request_id=${requestId:doublequote} or correlation_id=${requestId:doublequote})",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Cadeia de logs por Request/Correlation ID",
+      "type": "logs"
+    },
+    {
+      "description": "As consultas abaixo são atualizadas pelos dropdowns Serviço, Nível, Status HTTP e Request/Correlation ID. Selecione e copie a consulta desejada para Explore. O clique no gráfico não gera uma query específica sem uma ação/link.",
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 44 },
+      "id": 8,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": true,
+          "showMiniMap": false
+        },
+        "content": "API / Front — log level e status\n{dokploy_application=\"emporio-staging\"} | json | dokploy_service=~\"(api|front)\" | dokploy_service=~\"${service:raw}\" | line_format \"{{.message}}\" | json | log_level=~\"(?i)(${level:raw})\" | status=~\"${statusClass:raw}\"\n\nRadar — log level\n{dokploy_application=\"emporio-staging\"} | json | dokploy_service=\"radar\" | dokploy_service=~\"${service:raw}\" | line_format \"{{.message}}\" | json | level=~\"(?i)(${level:raw})\"\n\nCadeia API / Radar — request_id ou correlation_id\n{dokploy_application=\"emporio-staging\"} | json | line_format \"{{.message}}\" | json | (request_id=${requestId:doublequote} or correlation_id=${requestId:doublequote})",
+        "mode": "code"
+      },
+      "title": "Consultas LogQL para copiar no Explore",
+      "type": "text"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["emporio", "staging", "logs", "loki"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": true, "text": "All", "value": ".*" },
+        "includeAll": false,
+        "label": "Serviço",
+        "name": "service",
+        "options": [
+          { "selected": true, "text": "All", "value": ".*" },
+          { "selected": false, "text": "api", "value": "api" },
+          { "selected": false, "text": "front", "value": "front" },
+          { "selected": false, "text": "radar", "value": "radar" },
+          { "selected": false, "text": "postgres", "value": "postgres" },
+          { "selected": false, "text": "db-bootstrap", "value": "db-bootstrap" },
+          { "selected": false, "text": "migrate", "value": "migrate" },
+          { "selected": false, "text": "cloudflared", "value": "cloudflared" },
+          { "selected": false, "text": "prometheus", "value": "prometheus" }
+        ],
+        "query": "All : .*,api,front,radar,postgres,db-bootstrap,migrate,cloudflared,prometheus",
+        "type": "custom"
+      },
+      {
+        "current": { "selected": true, "text": "All", "value": ".*" },
+        "includeAll": false,
+        "label": "Nível",
+        "name": "level",
+        "options": [
+          { "selected": true, "text": "All", "value": ".*" },
+          { "selected": false, "text": "ERROR", "value": "error|fatal|critical" },
+          { "selected": false, "text": "WARN", "value": "warn|warning" },
+          { "selected": false, "text": "INFO", "value": "info" },
+          { "selected": false, "text": "DEBUG", "value": "debug" }
+        ],
+        "query": "All : .*,ERROR : error|fatal|critical,WARN : warn|warning,INFO : info,DEBUG : debug",
+        "type": "custom"
+      },
+      {
+        "current": { "selected": true, "text": "All", "value": ".*" },
+        "includeAll": false,
+        "label": "Status HTTP",
+        "name": "statusClass",
+        "options": [
+          { "selected": true, "text": "All", "value": ".*" },
+          { "selected": false, "text": "4xx", "value": "4.." },
+          { "selected": false, "text": "5xx", "value": "5.." }
+        ],
+        "query": "All : .*,4xx : 4..,5xx : 5..",
+        "type": "custom"
+      },
+      {
+        "current": { "selected": true, "text": "cole um ID", "value": "__cole_request_id__" },
+        "label": "Request/Correlation ID",
+        "name": "requestId",
+        "query": "__cole_request_id__",
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": { "from": "now-3h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Emporio B2B — Logs de staging",
+  "uid": "emporio-staging-logs",
+  "version": 7,
+  "weekStart": ""
+}

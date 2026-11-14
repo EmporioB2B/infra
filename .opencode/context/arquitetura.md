@@ -202,8 +202,9 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
   connector do Tunnel no deploy, primeiro login Access (rotas reportadas pelo
   operador e interceptação Access verificada em 2026-11-13; policy/IdP não
   auditados) e primeiro deploy/smoke continuam pendentes (TASK-INFRA-021).
-- **Existente — métricas de staging no artefato, não implantado (direção
-  aprovada em 2026-11-13):** o Compose de staging contém o serviço
+- **Existente — artefatos de métricas de staging (direção aprovada em
+  2026-11-13; implantação/configuração não verificadas independentemente):** o
+  Compose de staging contém o serviço
   `prometheus` (`${PROMETHEUS_IMAGE}`, pinada por digest no example) com
   `remote_write` para Grafana Cloud: entrypoint `sh` valida as envs
   `PROMETHEUS_REMOTE_WRITE_URL` (HTTPS obrigatório) e
@@ -231,10 +232,23 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
   serviço publica porta e o Prometheus não é dependência de saúde de ninguém.
   Validação local do artefato: `docker compose config --quiet` exit 0,
   entrypoint executado na imagem real com valores fictícios e `promtool check
-  config` SUCCESS; deploy na VPS, ingestão real no Grafana Cloud e scrape em
-  runtime seguem não provados — pendentes do primeiro deploy/smoke. Importar
-  os dashboards do dev no Grafana Cloud segue pendente de operação
-  (`compose/docker-compose.staging.yml:295-342,366-392`,
+  config` SUCCESS; deploy na VPS e scrape local de runtime não foram verificados
+  independentemente. **Relato do operador (2026-11-14):** testou o dashboard de
+  métricas e séries disponíveis no Grafana Cloud; essa confirmação não audita
+  independentemente o provider nem a origem do dado. Os
+  dashboards Loki/Prometheus de staging estão versionados em
+  `compose/grafana/dashboards-staging/`. **Existente — dashboard de métricas:**
+  a versão atual contém 35 painéis e 84 expressões. As 84 expressões passaram
+  `promtool check rules`; Grafana 12 descartável aceitou esta versão via
+  importação HTTP (200). **Relato do operador (2026-11-14, não verificado
+  independentemente):** importou/testou no Grafana Cloud o dashboard expandido,
+  suas consultas e as séries disponíveis; não se afirma quais painéis ou valores
+  específicos passaram. Permanecem pendentes o scrape/runtime local de staging
+  e a verificação independente da ingestão/configuração Cloud. O operador
+  confirmou no Cloud os snippets e a busca LogQL da TASK-INFRA-024
+  (`compose/grafana/dashboards-staging/emporio-staging-metrics.json:41-90,164-220,1650-1676`,
+  `docs/observability.md:224-243`,
+  `compose/docker-compose.staging.yml:295-342,366-392`,
   `compose/prometheus/prometheus.staging.yml:14-44`,
   `../../docs/staging-compose.md:51-104`).
 - **Existente — conta/stack Grafana Cloud (2026-11-13, operador):** slug
@@ -249,15 +263,53 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
   provisionados na UI não servem para ingestão externa. O example
   `env/.env.staging.example:74-86` contém URL/instance verificados e documenta
   o provider Loki; tokens vão somente no painel/File Mount.
-- **Planejado — implantação dos logs de staging:** stdout dos containers →
+- **Logs de staging:** stdout dos containers →
   driver `json-file` com rotação (buffer local; proposital para o agente do
   Dokploy, não `fluentd` como no dev) → `dokploy-vector` no host → push HTTPS
   → Grafana Cloud Loki, sem mudar o Compose e sem porta inbound; métricas
-  também são push (`remote_write`). O provider Grafana Loki ainda não foi
-  configurado no Dokploy (`Settings → Logs & Metrics`); destino: URL Loki +
-  tenant `1878826` + token `logs:write`
-  (`compose/docker-compose.staging.yml:24-28`, `decisoes.md`,
-  `../../docs/observability.md:161-185,192-197`).
+  também são push (`remote_write`). **Relato do operador (2026-11-14, não
+  verificado independentemente nesta sessão):** logs aparecem no Grafana
+  Cloud. O Label browser foi reportado com `dokploy_application`,
+  `dokploy_environment`, `dokploy_organization`, `dokploy_project`,
+  `dokploy_server`, `dokploy_test` e `service_name`; `service_name` vale
+  `unknown_service`, aplicação `emporio-staging` e ambiente `production`.
+  `dokploy_service` é campo do envelope JSON, não label indexado. O dashboard
+  versionado filtra a aplicação, parseia o envelope, extrai `dokploy_service`,
+  formata `message` e parseia o JSON interno; seletores `service`, `level` e
+  `statusClass` são estáticos. O comportamento documentado do parser JSON Loki
+  sanitiza pontos em nomes de campo para `_`, portanto o `log.level` literal
+  emitido pelo Front deve ser consultado como `log_level`. **Relato do operador
+  (2026-11-14):** snippets LogQL e busca Request/Correlation ID testados no
+  Grafana Cloud; runtime/provider não verificados independentemente.
+  **Existente no JSON (versão 7):** não há data links. O painel
+  Text/Code interpola os dropdowns `service`, `level` e `statusClass` nos
+  snippets LogQL, incluindo um snippet `requestId`, para cópia manual no
+  Explore. O clique em um ponto não gera nem copia query. O dashboard também
+  tem textbox `requestId` e painel de logs que parseia `message` e filtra
+  `request_id` ou `correlation_id`. Backend
+  `CorrelationIdFilter` registra `X-Request-Id` no MDC;
+  `RestClientRadarHttpClient` o propaga como `X-Correlation-ID`, aceito pelo
+  Radar como `problem_details.correlation_id` e gravado como `correlation_id`
+  no JSONL. O interceptor browser do Front gera ID por request; o `server.ts`
+  SSR lê/gera ID para a requisição SSR. Não equiparar esse ID SSR ao ID de uma
+  chamada de API nem presumir que componham a mesma cadeia. O dashboard filtra IDs
+  como campos do corpo e não os configura como labels Loki; o Label browser
+  reportado não inclui IDs, mas o estado atual no Cloud não foi verificado
+  independentemente. **Relato do operador (2026-11-14):** confirmou no Cloud a
+  cópia/execução dos snippets LogQL, busca Request/Correlation ID API→Radar e
+  ausência de navegação ao clicar nos gráficos. Isso não valida métricas no
+  Cloud nem comprova independentemente a interação. Provider,
+  agente e métricas Cloud não foram verificados independentemente. Fontes:
+  `../../docs/observability.md:187-216,246-253`,
+  `compose/grafana/dashboards-staging/emporio-staging-logs.json:18,28,46,53,81,90-240,247-302`,
+  `../Backend_Java/src/main/java/br/com/emporio/infrastructure/security/CorrelationIdFilter.java:21,36`,
+  `../Backend_Java/src/main/java/br/com/emporio/infrastructure/radar/http/RestClientRadarHttpClient.java:412-416`,
+  `../Radar_Middleware_Python/src/radar_middleware/api/problem_details.py:30-45`,
+  `../Radar_Middleware_Python/src/radar_middleware/infrastructure/observability/logging_setup.py:135-146`,
+  `../Front_Angular/src/app/core/http/correlation-id.interceptor.ts:4-15`,
+  `../Front_Angular/src/server.ts:57-61`
+  (`compose/docker-compose.staging.yml:24-28`,
+  https://grafana.com/docs/loki/latest/query/log_queries/).
 
 ## Desenvolvimento/integração (máquina local)
 
