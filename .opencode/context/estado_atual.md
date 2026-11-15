@@ -55,28 +55,35 @@ Fotografia factual vigente. Não é cronologia de tasks.
   Compose usa `APP_MEDIA_BASE_URL` e exige também
   `CADASTRO_CONFIRMATION_BASE_URL` e `APP_PASSWORD_RESET_BASE_URL`
   (`compose/docker-compose.staging.yml:120-122`); o example cobre as três
-  (`env/.env.staging.example:23-25`). **Existente — código irmão:**
-  `Backend_Java_Anuncios` usa `APP_MEDIA_BASE_URL` e exige as URLs de
-  confirmação/reset no profile `prod`
-  (`../Backend_Java_Anuncios/src/main/resources/application.yml:158`,
-  `../Backend_Java_Anuncios/src/main/resources/application-prod.yml:8-11`). O clone canônico `Backend_Java` usado pelo
-  Compose dev ainda lê `APP_EMAIL_MEDIA_BASE_URL` e mantém defaults locais
-  (`src/main/resources/application.yml:93,113,158`; `application-prod.yml:9`);
-  não concluir que o nome legado pode ser removido do dev. **Relato do operador,
+   (`env/.env.staging.example:23-25`). **Existente — código irmão atual
+   auditado:** `Backend_Java_Cliente` usa `APP_MEDIA_BASE_URL` e exige as URLs
+   de confirmação/reset no profile `prod`
+   (`../Backend_Java_Cliente/src/main/resources/application.yml:157-163`,
+   `../Backend_Java_Cliente/src/main/resources/application-prod.yml:5-11`).
+   O clone canônico `Backend_Java` usado pelo Compose dev também lê
+   `APP_MEDIA_BASE_URL` (`../Backend_Java/src/main/resources/application.yml:152-159`).
+   **Existente — integração TASK-INFRA-026 no artefato:** a API é iniciada com
+   `staging,container`, exige `APP_AUTH_RATE_LIMIT_KEY` e
+   `APP_AUTH_TRUSTED_PROXIES`, e o example documenta os limites de login e o
+   peer `10.254.32.10/32`
+   (`compose/docker-compose.staging.yml:109-129`,
+   `env/.env.staging.example:26-33`,
+   `../Backend_Java_Cliente/src/main/java/br/com/emporio/clientes/auth/infrastructure/config/AuthPropertiesConfiguration.java:43-60`,
+   `../Backend_Java_Cliente/src/main/java/br/com/emporio/infrastructure/config/TrustedProxyStartupGuard.java:7-22`).
+   **Relato do operador,
   não verificado independentemente nesta sessão:** associação Custom Domain R2
   `media-staging.emporiob2b.com.br` e asset do logo funcionais; não houve acesso
   a Cloudflare/R2/VPS nem validação de deploy nesta auditoria.
-  **Relato do operador, não verificado independentemente nesta sessão:**
-  staging funcional. O operador também mostrou logs de API/Front do stack no
-  Grafana Cloud; isso comprova que alguns containers produziram logs recebidos,
-  mas não confirma saúde integral, rotas ou o estado do deploy. **Existente — borda
+   **Relato do operador (TASK-INFRA-026; não verificado independentemente nesta
+   auditoria):** todos os serviços staging estão healthy na VPS. O operador
+   também mostrou logs de API/Front do stack no Grafana Cloud; isso não substitui
+   auditoria independente do deploy. **Existente — borda
    Cloudflare de staging (2026-11-13):** zona `emporiob2b.com.br` Active
   (NS `dora`/`gannon.ns.cloudflare.com`); túnel remotamente gerenciado
   `emporio-staging` (`87a7e326-bc1b-43fb-9091-212fa38e0fdb`) criado no
-  dashboard da conta dona da zona. No último estado verificado (2026-11-13), o
-  connector estava Inactive e ainda não implantado na VPS; deveria ligar via
-  compose/Dokploy no deploy. O relato posterior de logs Cloud não confirma seu
-  estado atual.
+   dashboard da conta dona da zona. **Relato atual do operador (TASK-INFRA-026;
+   não verificado independentemente):** o connector está em runtime na VPS e os
+   serviços staging estão healthy.
   **Verificado (2026-11-13, `dig`/`curl` públicos):** DNS de
   `staging.emporiob2b.com.br` e `api-staging.emporiob2b.com.br` na borda
   Cloudflare (`188.114.96.2`/`188.114.97.2`, proxied) e Access interceptando
@@ -107,9 +114,19 @@ Fotografia factual vigente. Não é cronologia de tasks.
   **Relato posterior do operador:** logs de API/Front aparecem no Grafana Cloud;
   provider/agente e labels ainda não foram auditados independentemente. Env de
   métricas no painel (nomes e URLs não secretos verificados no example), valores
-  reais, primeiro login Access, connector e saúde integral/deploy/smoke não
-  foram verificados nesta sessão. Ver
-  [`../../docs/staging-contract.md`](../../docs/staging-contract.md).
+   reais, primeiro login Access e auditoria independente do deploy/smoke não
+   foram verificados nesta sessão. Ver
+   [`../../docs/staging-contract.md`](../../docs/staging-contract.md).
+   **Relato do operador (TASK-INFRA-026; não verificado independentemente nesta
+   auditoria):** todos os serviços staging estão healthy na VPS; no runtime,
+   `tunnel-api` contém `cloudflared=10.254.32.10` e `api=10.254.32.20`, e
+   `tunnel-front` contém `cloudflared=10.254.33.10` e `front=10.254.33.20`.
+   A rede `apps` contém somente API/Front, `radar-net` somente API/Radar e,
+   no runtime observado, `database` somente Postgres/API (os jobs one-shot
+   podem já ter terminado; o Compose ainda os declara nessa rede). Testes do operador via `/dev/tcp` não
+   encontraram listeners no host em `8000`, `8080`, `8081`, `5432` ou `9090`.
+   O `curl` público ainda retorna `302` do Cloudflare Access; isso prova
+   interceptação na borda, não request autenticada atravessando o Tunnel.
 - **Existente — conta/stack Grafana Cloud (2026-11-13, criada pelo operador):**
   slug `smallmarzipan1294`, região `prod-sa-east-1` (São Paulo), free tier.
   Access Policies criadas: `emporio-staging-logs` (`logs:write`) e
@@ -147,15 +164,15 @@ Fotografia factual vigente. Não é cronologia de tasks.
    Request/Correlation ID API→Radar e que os gráficos não navegam. Provider/
    agente e ingestão de métricas não foram verificados independentemente nesta
    sessão.
-- **Plano aprovado — hosting:** staging primeiro; produção futura dividirá a
+ - **Plano aprovado — hosting:** staging primeiro; produção futura dividirá a
    mesma VPS por não haver outra máquina. Stacks, redes e segredos separados não
    formam uma fronteira forte de segurança. Cloudflare Access de staging
    configurado na borda e interceptando os dois hostnames (302 verificado em
-   2026-11-13); túnel `emporio-staging` criado no dashboard. Último estado do
-   connector verificado em 2026-11-13: Inactive, ainda não ligado na VPS.
-   Operador posteriormente mostrou logs da API/Front no Grafana Cloud, mas isso
-   não comprova o connector, o túnel público ou saúde integral. Primeiro login
-   Access segue sem evidência independente nesta sessão.
+   2026-11-13); túnel `emporio-staging` criado no dashboard. **Relato atual do
+   operador (TASK-INFRA-026, não verificado independentemente):** connector e
+   serviços staging estão healthy na VPS. Primeiro login Access segue sem
+   evidência independente; o 302 não prova request autenticada atravessando o
+   Tunnel.
 - **Planejado — contrato CI/CD das aplicações:** `docs/cicd.md` determina gate de testes e
   publicação GHCR multiarch `linux/amd64,linux/arm64` por SHA completo em
   `main`; `latest` é opcional e não seleciona deploy. Deploy de staging é
@@ -503,7 +520,8 @@ Fotografia factual vigente. Não é cronologia de tasks.
   (R2 Back/Radar + objetos parquet do Radar, SMTP, senhas Postgres, JWT, token
   do túnel), primeiro login Access (rotas do túnel reportadas pelo operador e
   interceptação Access verificada em 2026-11-13; policy/IdP não auditados),
-  connector ligado no deploy e o deploy/smoke em si.
+   connector healthy e serviços staging healthy foram reportados pelo operador;
+   auditoria independente do deploy/smoke continua pendente.
 - **Existente — Backend_Java:** Overrides de dev maduros no repo do Back: `docker-compose.yml`
   (backend + postgres-dev + postgres-test), `docker-compose.rustfs.yml`
   (R2 local com bootstrap idempotente de buckets e credenciais read-only
@@ -676,10 +694,11 @@ Fotografia factual vigente. Não é cronologia de tasks.
     stack não reservam folga se ambos os stacks estourarem simultaneamente
     (`compose/docker-compose.staging.yml:295-342,366-392`,
     `../../docs/staging-compose.md:51-80`).
-- **Existente — contrato e artefatos de staging:** contrato, Compose
+ - **Existente — contrato, artefatos e runtime reportado de staging:** contrato, Compose
   `compose/docker-compose.staging.yml` (incluindo o Prometheus de métricas),
   template `compose/prometheus/prometheus.staging.yml`, env example e runbooks
-  existem no repo; não foram carregados no Dokploy nem implantados. O teto
+   existem no repo; o operador reportou todos os serviços healthy na VPS, sem
+   auditoria independente do deploy. O teto
   aprovado por stack é 2 CPU/12 GiB (decisão do operador de 2026-11-13, divisão
   meio a meio entre staging e produção futura; substitui o teto inicial de
   1,5 CPU/3 GiB); os limites long-lived do Compose atual somam 1,75 CPU/
@@ -701,8 +720,9 @@ Fotografia factual vigente. Não é cronologia de tasks.
   reais (R2 Back/Radar + objetos parquet do Radar, SMTP, senhas Postgres, JWT,
   token do túnel), pelo primeiro login Access e pelo deploy/smoke em si.
   **Existente — borda de staging (2026-11-13):** zona Active na Cloudflare,
-  túnel `emporio-staging` criado no dashboard (Inactive esperado; connector
-  desligado na VPS até o deploy), rotas `staging` → `http://front:4000` e
+   túnel `emporio-staging` criado no dashboard; connector healthy na VPS foi
+   reportado pelo operador em TASK-INFRA-026, sem validação independente. Rotas
+   `staging` → `http://front:4000` e
   `api-staging` → `http://api:8080` reportadas pelo operador; DNS dos dois
   hostnames na borda Cloudflare e interceptação Access (302 ao time domain
   `soft-salad-0948`) verificados por `dig`/`curl`; policy/IdP não auditados,
@@ -713,8 +733,8 @@ Fotografia factual vigente. Não é cronologia de tasks.
   URLs são o desenho aprovado; buckets e credenciais Back/Radar/SMTP seguem
   sem provisionamento independentemente confirmado nesta auditoria.
    O Dokploy está instalado. O operador mostrou logs de API/Front associados ao
-   stack staging no Grafana Cloud, mas o deploy integral e o estado em runtime
-   não foram auditados independentemente; MFA do painel foi adiado com exceção
+    stack staging no Grafana Cloud e reportou todos os serviços healthy, mas o
+    deploy integral não foi auditado independentemente; MFA do painel foi adiado com exceção
    aceita (TASK-INFRA-022).
   Produção na mesma máquina continua futura e requer revisão explícita de
   recursos/isolamento (`docs/oracle-vps.md:12-20,83-91`;

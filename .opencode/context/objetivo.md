@@ -2,7 +2,8 @@
 
 Ser dono da infraestrutura conjunta do marketplace Emporio B2B: ambiente
 local reproduzível para testes de integração e E2E (**existente — dev**),
-staging (**planejado — próximo ambiente**) e produção (**planejada — posterior**)
+staging (**existente — runtime reportado pelo operador; artefatos no repo**) e
+produção (**planejada — posterior**)
 via Dokploy na VPS OCI, cadeia CI/CD dos repositórios de aplicação e borda
 Cloudflare (túnel + domínios; **planejada**).
 
@@ -16,11 +17,12 @@ fronteira forte de segurança; ver `vps_oracle.md` e `decisoes.md`.
   radar, postgres, RustFS (emulando R2, inclusive o bucket público de fotos),
   Mailpit (capturando SMTP) e observabilidade local (Vector, Loki, Prometheus
   e Grafana), na mesma topologia principal de redes da produção planejada.
-- Compose de staging (**existente — artefatos no repo; implantação planejada**): protegido por
-  Cloudflare Access e separado de produção em stacks, redes, volumes, dados e
-  credenciais; PostgreSQL local em container e integrações com R2/SMTP reais
-  de teste/staging, ainda sem configuração implantada. TASK-INFRA-020 criou
-  Compose, env example e runbooks; não foram carregados no Dokploy.
+- Compose de staging (**existente — artefatos no repo e runtime reportado pelo
+  operador**): protegido por Cloudflare Access e separado de produção em
+  stacks, redes, volumes, dados e credenciais; PostgreSQL local em container e
+  integrações com R2/SMTP reais de teste/staging. TASK-INFRA-020/TASK-INFRA-026
+  criaram Compose, env example e runbooks. O operador reportou todos os serviços
+  staging healthy na VPS; não houve auditoria independente do deploy.
 - Compose de produção (**planejado — produção**): `cloudflared`, front, api e
   radar; sem banco em container (o PostgreSQL do Back é o Supabase externo),
   no mesmo host OCI de staging por decisão do operador.
@@ -43,8 +45,8 @@ fronteira forte de segurança; ver `vps_oracle.md` e `decisoes.md`.
   `emporiob2b.com.br` (front) e `api.emporiob2b.com.br` (api);
   `media.emporiob2b.com.br` resolve para o bucket público do R2 sem passar
   pela VPS. Staging (**existente na borda, 2026-11-13**) — túnel
-  `emporio-staging` criado no dashboard, connector liga via compose/Dokploy
-  no deploy; Cloudflare Access intercepta `staging`/`api-staging` (DNS e 302
+  `emporio-staging` criado no dashboard, connector reportado healthy no runtime
+  via Compose/Dokploy; Cloudflare Access intercepta `staging`/`api-staging` (DNS e 302
   verificados; primeiro login pendente); associação do Custom Domain
   `media-staging` e acesso do logo reportados pelo operador, sem validação
   independente nesta sessão.

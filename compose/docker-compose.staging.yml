@@ -106,7 +106,7 @@ services:
     image: ${BACKEND_IMAGE:?BACKEND_IMAGE precisa ser uma imagem Backend GHCR imutável}
     pull_policy: always
     environment:
-      SPRING_PROFILES_ACTIVE: prod,container
+      SPRING_PROFILES_ACTIVE: staging,container
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/emporio?currentSchema=identidade,catalogo,mercadoria,comercial,infraestrutura,venda,pedidos
       SPRING_DATASOURCE_USERNAME: emporio_app
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD obrigatória}
@@ -120,6 +120,12 @@ services:
       APP_PASSWORD_RESET_BASE_URL: ${APP_PASSWORD_RESET_BASE_URL:?APP_PASSWORD_RESET_BASE_URL staging obrigatória}
       CADASTRO_CONFIRMATION_BASE_URL: ${CADASTRO_CONFIRMATION_BASE_URL:?CADASTRO_CONFIRMATION_BASE_URL staging obrigatória}
       APP_MEDIA_BASE_URL: ${APP_MEDIA_BASE_URL:?APP_MEDIA_BASE_URL staging obrigatória}
+      APP_AUTH_RATE_LIMIT_KEY: ${APP_AUTH_RATE_LIMIT_KEY:?APP_AUTH_RATE_LIMIT_KEY staging obrigatória}
+      APP_AUTH_TRUSTED_PROXIES: ${APP_AUTH_TRUSTED_PROXIES:?APP_AUTH_TRUSTED_PROXIES staging obrigatória}
+      APP_AUTH_LOGIN_RATE_LIMIT_WINDOW: ${APP_AUTH_LOGIN_RATE_LIMIT_WINDOW:-1m}
+      APP_AUTH_LOGIN_RATE_LIMIT_MAX_IP: ${APP_AUTH_LOGIN_RATE_LIMIT_MAX_IP:-10}
+      APP_AUTH_LOGIN_RATE_LIMIT_MAX_IDENTITY: ${APP_AUTH_LOGIN_RATE_LIMIT_MAX_IDENTITY:-5}
+      APP_AUTH_LOGIN_RATE_LIMIT_MAX_KEYS: ${APP_AUTH_LOGIN_RATE_LIMIT_MAX_KEYS:-20000}
       APP_AUTH_COOKIE_SECURE: "true"
       RADAR_BASE_URL: http://radar:8000
       RADAR_CONNECT_TIMEOUT: ${RADAR_CONNECT_TIMEOUT:-500ms}
@@ -155,6 +161,8 @@ services:
       apps:
       database:
       radar-net:
+      tunnel-api:
+        ipv4_address: 10.254.32.20
       api-egress:
       metrics-net:
         ipv4_address: 10.254.30.10
@@ -239,7 +247,9 @@ services:
     environment:
       PORT: "4000"
     networks:
-      - apps
+      apps:
+      tunnel-front:
+        ipv4_address: 10.254.33.20
     depends_on:
       api:
         condition: service_healthy
@@ -274,8 +284,11 @@ services:
       TUNNEL_TOKEN: ${CLOUDFLARED_TUNNEL_TOKEN:?token do Tunnel de staging obrigatório}
       TUNNEL_METRICS: 127.0.0.1:2000
     networks:
-      - apps
-      - tunnel-egress
+      tunnel-front:
+        ipv4_address: 10.254.33.10
+      tunnel-api:
+        ipv4_address: 10.254.32.10
+      tunnel-egress:
     depends_on:
       front:
         condition: service_healthy
@@ -353,6 +366,22 @@ networks:
     name: emporio-staging_apps
     driver: bridge
     internal: true
+  tunnel-front:
+    name: emporio-staging_tunnel-front
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.254.33.0/24
+          gateway: 10.254.33.1
+  tunnel-api:
+    name: emporio-staging_tunnel-api
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.254.32.0/24
+          gateway: 10.254.32.1
   radar-net:
     name: emporio-staging_radar-net
     driver: bridge

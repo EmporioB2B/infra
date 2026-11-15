@@ -17,9 +17,11 @@ Browser ──HTTPS──> Cloudflare (CDN/WAF/edge, TLS termina aqui)
   publicada no host. Além do SSH, a VPS não expõe superfície.
 - O ingress do túnel é configurado no dashboard Zero Trust por hostname,
   apontando para os containers na rede Docker `apps`.
-- O Back serve HTTP puro e confia em `X-Forwarded-*`
+- O Back serve HTTP puro e o framework processa `X-Forwarded-*`
   (`forward-headers-strategy: framework`); o cloudflared injeta esses
-  headers. Não existe terminação TLS dentro da VPS.
+  headers. Para resolver o IP do cliente nos fluxos protegidos, o código de
+  staging não aceita `X-Forwarded-*`: só aceita `CF-Connecting-IP` de um peer
+  físico allowlisted. Não existe terminação TLS dentro da VPS.
 - `emporiob2b.com.br` e `api.emporiob2b.com.br` são same-site (mesmo
   eTLD+1): o cookie de refresh `SameSite=Lax` host-only da api continua
   válido no desenho de subdomínio. CORS com credentials é necessário
@@ -92,8 +94,9 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
   `emporiob2b.com.br` Active (NS `dora`/`gannon.ns.cloudflare.com`); túnel
   remotamente gerenciado `emporio-staging`
   (`87a7e326-bc1b-43fb-9091-212fa38e0fdb`) criado no dashboard da conta dona
-  da zona, Inactive esperado até o connector ligar via compose/Dokploy no
-  deploy. Rotas de published application reportadas pelo operador:
+  da zona; connector healthy no runtime foi reportado pelo operador em
+  TASK-INFRA-026, sem verificação independente. Rotas de published application
+  reportadas pelo operador:
   `staging` → `http://front:4000` e `api-staging` → `http://api:8080` (o
   painel exige URL com prefixo `http://`). Verificado por `dig`/`curl`
   públicos: DNS dos dois hostnames na borda Cloudflare (proxied) e Access
@@ -154,17 +157,22 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
   TASK-INFRA-021 estão fechados. Validar run no staging ARM64 antes do deploy
   de produção.
 - **Existente (2026-11-11):** Dokploy v0.31.0 instalado; projeto e serviço
-  Compose `Emporio Staging` criados no painel, sem YAML nem aplicações, e o
-  PostgreSQL de staging ainda não foi criado. Painel acessado por SSH forward.
+  Compose `Emporio Staging` criados no painel e painel acessado por SSH
+  forward. **Relato do operador (TASK-INFRA-026; não verificado
+  independentemente nesta auditoria):** todos os serviços staging estão healthy
+  na VPS.
   MFA/passkey foi adiado com exceção temporária aceita e é acompanhado pela
   TASK-INFRA-022. **Existente — borda Cloudflare (2026-11-13):** túnel
-  `emporio-staging` criado no dashboard (Inactive esperado; connector ainda
-  não ligado na VPS, liga no deploy) e Access interceptando os dois hostnames
-  (302 verificado); primeiro login pendente. Evidências em `vps_oracle.md` e
-  `estado_atual.md`.
-- **Existente — artefatos TASK-INFRA-020 no repo, não carregados no Dokploy nem implantados:**
+  `emporio-staging` criado no dashboard; connector healthy no runtime foi
+  reportado pelo operador em TASK-INFRA-026, sem verificação independente.
+  Access intercepta os dois hostnames (302 verificado); primeiro login
+  pendente. Evidências em `vps_oracle.md` e `estado_atual.md`.
+- **Existente — artefatos e runtime reportado TASK-INFRA-020/TASK-INFRA-026:**
   `compose/docker-compose.staging.yml` e `env/.env.staging.example` definem o
-  projeto `emporio-staging`. `apps` é interna (front/api/cloudflared),
+  projeto `emporio-staging`. `apps` é interna (front/api); `tunnel-front` é
+  interna e exclusiva de cloudflared↔front, e `tunnel-api` é interna e
+  exclusiva de cloudflared↔api (`10.254.33.0/24` e `10.254.32.0/24`,
+  respectivamente),
   `radar-net` interna e só API↔Radar; `database` interna (postgres/bootstrap/
   migrate/api); `metrics-net` interna (api/prometheus) e `radar-metrics-net`
   interna (radar/prometheus). Redes `api-egress`, `radar-egress`,
@@ -199,9 +207,19 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
   (`PROMETHEUS_IMAGE`, `PROMETHEUS_REMOTE_WRITE_URL/USERNAME` — valores
   verificados no example), valores reais (R2 Back/Radar +
   objetos parquet do Radar, SMTP, senhas Postgres, JWT, token do túnel),
-  connector do Tunnel no deploy, primeiro login Access (rotas reportadas pelo
-  operador e interceptação Access verificada em 2026-11-13; policy/IdP não
-  auditados) e primeiro deploy/smoke continuam pendentes (TASK-INFRA-021).
+   connector do Tunnel está reportado healthy no runtime; primeiro login Access
+   (rotas reportadas pelo operador e interceptação Access verificada em
+   2026-11-13; policy/IdP não auditados), auditoria independente do deploy e
+   smoke independente continuam pendentes (TASK-INFRA-021).
+ - **Relato de runtime staging (TASK-INFRA-026; operador, não verificado
+   independentemente):** todos os serviços foram reportados healthy na VPS.
+   `tunnel-api`: `cloudflared=10.254.32.10`, `api=10.254.32.20`;
+   `tunnel-front`: `cloudflared=10.254.33.10`, `front=10.254.33.20`;
+   `apps` contém somente API/Front, `radar-net` somente API/Radar e
+   `database` somente Postgres/API. A checagem do operador via `/dev/tcp` não
+   encontrou listeners no host em `8000`, `8080`, `8081`, `5432` ou `9090`.
+   O `curl` público ainda retorna `302` do Cloudflare Access: isso prova
+   interceptação na borda, não request autenticada atravessando o Tunnel.
 - **Existente — artefatos de métricas de staging (direção aprovada em
   2026-11-13; implantação/configuração não verificadas independentemente):** o
   Compose de staging contém o serviço

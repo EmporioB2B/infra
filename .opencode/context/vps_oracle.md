@@ -1,7 +1,8 @@
 # VPS Oracle Cloud — estado factual
 
 Snapshot baseado na console OCI e em comandos executados pelo operador em
-2026-11-11, acrescido de fatos de 2026-11-13: borda Cloudflare de staging
+2026-11-11, acrescido de fatos de 2026-11-13 e do relato runtime da
+TASK-INFRA-026: borda Cloudflare de staging
 configurada no dashboard (túnel `emporio-staging`, rotas e Access), com DNS
 e interceptação Access verificados por `dig`/`curl` públicos; publicação das
 imagens GHCR verificada por `imagetools inspect` e perfil staging do Front
@@ -88,9 +89,11 @@ na console antes de qualquer operação. O runbook legível está em
 
 - Decisão do operador: começar por **staging** e, por falta de uma segunda
   máquina disponível, hospedar futuramente **staging e produção na mesma VPS**.
-  Nenhum ambiente de aplicação está implantado ainda e o PostgreSQL de staging
-  ainda não foi criado. O repo contém o Compose da TASK-INFRA-020, ainda não
-  carregado no serviço do painel.
+  **Relato do operador (TASK-INFRA-026; não verificado independentemente nesta
+  auditoria):** o staging está implantado na VPS e todos os seus serviços estão
+  healthy. O PostgreSQL de staging faz parte desse runtime; o Compose
+  versionado continua sendo a fonte da topologia, não prova independente do
+  deploy.
 - Contrato aprovado na TASK-INFRA-019: PostgreSQL 17 local com bootstrap,
   migrador e runtime separados; sem dados de produção. Back e Radar terão
   recursos/credenciais R2 de staging dedicados e separados; Radar usa R2 real.
@@ -114,7 +117,8 @@ na console antes de qualquer operação. O runbook legível está em
   (estimativa) e a soma dos tetos (24 GiB) não deixa folga de sistema se ambos
   os stacks estourarem simultaneamente — monitorar a folga real do host antes
   da produção entrar. Métricas de staging (Prometheus com `remote_write`
-  dentro do Compose) são **artefato existente, implantação não verificada**;
+  dentro do Compose) são **artefato existente, runtime healthy reportado pelo
+  operador e não verificado independentemente**;
   **relato do operador (2026-11-14, não verificado independentemente nesta
   sessão):** logs via `dokploy-vector` aparecem no Grafana Cloud. O Label browser
   reportado lista `dokploy_application`, `dokploy_environment`,
@@ -134,8 +138,8 @@ na console antes de qualquer operação. O runbook legível está em
   Basic Auth. **Existente (2026-11-13):** zona `emporiob2b.com.br` Active na
   conta Cloudflare (NS `dora`/`gannon.ns.cloudflare.com`); túnel remotamente
   gerenciado `emporio-staging` (`87a7e326-bc1b-43fb-9091-212fa38e0fdb`)
-  criado no dashboard com status Inactive — esperado, pois o connector ainda
-  não está implantado na VPS e liga via compose/Dokploy no deploy. Rotas de
+  criado no dashboard. **Relato atual do operador (TASK-INFRA-026; não verificado
+  independentemente):** o connector está em runtime healthy na VPS. Rotas de
   published application criadas pelo operador (reportadas):
   `staging.emporiob2b.com.br` → `http://front:4000` e
   `api-staging.emporiob2b.com.br` → `http://api:8080`; o painel atual exige
@@ -153,7 +157,8 @@ na console antes de qualquer operação. O runbook legível está em
   Zero Trust `soft-salad-0948`. A aplicação Access foi criada pelo operador
   antes das rotas; policy/IdP não auditados em detalhe. O 302 prova
   interceptação, não que o operador consegue logar — primeiro login real
-  pendente. SSL/TLS da zona em Full (strict) é reportado pelo operador, não
+  pendente. O 302 prova interceptação do Access, não request autenticada
+  atravessando o Tunnel. SSL/TLS da zona em Full (strict) é reportado pelo operador, não
   verificado independentemente (HTTPS funcionando sem loop é consistente).
   **Relato do operador, não verificado independentemente nesta sessão:**
   associação do Custom Domain R2 `media-staging.emporiob2b.com.br` e acesso

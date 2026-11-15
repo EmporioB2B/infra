@@ -33,8 +33,13 @@ estão aposentados.
   firewall nesse caminho (`Backend_Java/Dockerfile:23-38`,
   `Backend_Java/src/main/resources/application-container.yml:35-42`,
   `compose/docker-compose.dev.yml:177-190,262-285,513-522`).
-- Profiles: `dev`, `test`, `container`, `prod`. Combinações vigentes:
-  dev em compose `dev,container`; produção `prod,container`.
+- Profiles: `dev`, `test`, `container`, `prod`; o clone de trabalho auditado
+  também reconhece `staging` no guard de configuração. Combinações vigentes:
+  dev em compose `dev,container`; staging no artefato da Infra
+  `staging,container`; produção `prod,container`
+  (`../Backend_Java_Cliente/src/main/resources/application.yml:1-5`,
+  `../Backend_Java_Cliente/src/main/java/br/com/emporio/infrastructure/config/TrustedProxyStartupGuard.java:7-21`,
+  `compose/docker-compose.staging.yml:105-110`).
 - **Contrato de métricas do Backend (existente, verificado no código-fonte do
   irmão e no scrape dev; a Infra consome, não é dona dos valores de domínio)**
   via `/actuator/prometheus` (8081):
@@ -87,6 +92,17 @@ estão aposentados.
   `MANAGEMENT_SERVER_ADDRESS`.
   No clone canônico `Backend_Java`, profile `prod` soma
   `APP_PASSWORD_RESET_BASE_URL` (`application-prod.yml:9`).
+- **Existente — staging no clone de trabalho `Backend_Java_Cliente`:**
+  `APP_AUTH_RATE_LIMIT_KEY` e `APP_AUTH_TRUSTED_PROXIES` são obrigatórios no
+  startup de `staging`/`prod`; o limite de login aceita
+  `APP_AUTH_LOGIN_RATE_LIMIT_WINDOW`, `APP_AUTH_LOGIN_RATE_LIMIT_MAX_IP`,
+  `APP_AUTH_LOGIN_RATE_LIMIT_MAX_IDENTITY` e
+  `APP_AUTH_LOGIN_RATE_LIMIT_MAX_KEYS`, com defaults `1m/10/5/20000`.
+  A chave precisa ter ao menos 256 bits e o placeholder do example é rejeitado
+  (`../Backend_Java_Cliente/src/main/java/br/com/emporio/clientes/auth/infrastructure/config/AuthPropertiesConfiguration.java:43-60`,
+  `../Backend_Java_Cliente/src/main/java/br/com/emporio/infrastructure/config/TrustedProxyStartupGuard.java:18-22`,
+  `../Backend_Java_Cliente/src/main/java/br/com/emporio/clientes/auth/application/sessao/LoginRateLimitPolicy.java:13-36`,
+  `../Backend_Java_Cliente/src/main/resources/application.yml:84-91`).
 - Envs relevantes por escopo:
   - Radar: `RADAR_BASE_URL` (dev/prod: `http://radar:8000`),
     `RADAR_CONNECT_TIMEOUT`, `RADAR_READ_TIMEOUT`,
@@ -135,22 +151,22 @@ estão aposentados.
     path (`APP_STORAGE_R2_PUBLICO_BASE_URL=https://media.emporiob2b.com.br`),
     e não haverá media-gateway na VPS; `media.emporiob2b.com.br` será servido
     diretamente pelo bucket público R2.
-  - Email no clone canônico `../Backend_Java` usado pelo Compose dev:
+  - Email nos clones `../Backend_Java` (usado pelo Compose dev) e
+    `../Backend_Java_Cliente` (working tree auditado para o staging):
     `APP_EMAIL_ENABLED`, `APP_EMAIL_HEALTH_ENABLED`, `SMTP_HOST`,
     `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `APP_EMAIL_FROM`,
-    `APP_EMAIL_REPLY_TO`, `APP_EMAIL_MEDIA_BASE_URL` (default prod:
-    `https://media.emporiob2b.com.br`). **Não retirar ainda o nome legado no
-    Compose dev**: esse clone ainda o lê em
-    `Backend_Java/src/main/resources/application.yml:158`.
-    **Contrato implementado na cópia `../Backend_Java_Anuncios`, destinada à
-    próxima imagem de staging (publicação/deploy dessa cópia não verificados):**
-    a base dos templates de email é `APP_MEDIA_BASE_URL` (default em
-    `../Backend_Java_Anuncios/src/main/resources/application.yml:156-158`); o profile `prod` exige
+    `APP_EMAIL_REPLY_TO` e `APP_MEDIA_BASE_URL` (default prod:
+    `https://media.emporiob2b.com.br`). A fonte atual de ambos usa
+    `APP_MEDIA_BASE_URL` (`../Backend_Java/src/main/resources/application.yml:152-159`;
+    `../Backend_Java_Cliente/src/main/resources/application.yml:157-163`);
+    não há base atual `APP_EMAIL_MEDIA_BASE_URL` nesses dois clones.
+    No clone `Backend_Java_Cliente`, o profile `prod` exige
     `APP_PASSWORD_RESET_BASE_URL` e `CADASTRO_CONFIRMATION_BASE_URL`
-    (`../Backend_Java_Anuncios/src/main/resources/application-prod.yml:8-11`). O Compose staging injeta as três URLs e o
-    example as cobre (`compose/docker-compose.staging.yml:120-122`,
-    `env/.env.staging.example:23-25`). Não inferir que a mudança do clone de
-    staging já existe no clone canônico do dev.
+    (`../Backend_Java_Cliente/src/main/resources/application-prod.yml:5-11`);
+    `staging,container` herda a configuração comum. O Compose staging injeta as
+    três URLs e o example as cobre (`compose/docker-compose.staging.yml:109,120-122`,
+    `env/.env.staging.example:22-25`). Publicação/deploy dessa cópia não foram
+    verificados.
     Com `APP_EMAIL_ENABLED=true`,
     `EmailConfiguration.validateEnabledConfiguration` falha o boot sem
     `SMTP_USERNAME`/`SMTP_PASSWORD` não vazios e sem SMTP autenticado com
@@ -164,10 +180,9 @@ estão aposentados.
     (SAN=`mailpit`) + truststore do JVM (ver `arquitetura.md`, seção dev).
     - **Existente — logo estático de email:** caminho fixo
       `/img/email/logo.png`, sem seleção por organização nem consulta a logo
-      no banco. No clone `Backend_Java_Anuncios`, a base é `APP_MEDIA_BASE_URL`;
-      no clone canônico `Backend_Java` (Compose dev), permanece
-      `APP_EMAIL_MEDIA_BASE_URL`. Fontes: os `application*.yml` citados acima
-      e os templates correspondentes nos dois clones. Isso
+      no banco. Nos clones `Backend_Java_Cliente` e `Backend_Java`, a base é
+      `APP_MEDIA_BASE_URL`. Fontes: os `application*.yml` citados acima e os
+      templates correspondentes nos dois clones. Isso
       não significa ausência de logos de marcas no domínio: `marca.logo_arquivo_id`
       existe para marcas (`../Backend_Java/src/main/resources/db/migration/V3__catalogo_taxonomia.sql:14-23`),
       mas não é o logo estático dos emails. **Existente — ferramenta manual
@@ -205,8 +220,15 @@ estão aposentados.
   - [PLANEJADO — produção] O handoff de produção descreve a mesma credencial,
     prefixo e policy mínima, mas não aplica alteração no R2, Cloudflare ou
     Dokploy.
-  - Rate limit por IP atrás de proxy: `VALIDACAO_CNPJ_TRUSTED_PROXIES`
-    (produção: rede do túnel/containers).
+  - **Existente — código irmão atual:** login, redefinição de senha, cadastro
+    público e validação de CNPJ usam `TrustedClientIpResolver`; somente um
+    `CF-Connecting-IP` literal é aceito quando o peer físico pertence a
+    `APP_AUTH_TRUSTED_PROXIES`, e peers não confiáveis usam o peer físico
+    (`../Backend_Java_Cliente/src/main/java/br/com/emporio/infrastructure/security/TrustedClientIpResolver.java:14-33`,
+    `../Backend_Java_Cliente/src/main/java/br/com/emporio/clientes/auth/api/sessao/LoginController.java:30-47`,
+    `../Backend_Java_Cliente/src/main/java/br/com/emporio/clientes/auth/api/credencial/PasswordResetController.java:28-45`,
+    `../Backend_Java_Cliente/src/main/java/br/com/emporio/clientes/cadastro/api/publico/CadastroPublicoController.java:36-58`,
+    `../Backend_Java_Cliente/src/main/java/br/com/emporio/clientes/cadastro/api/cnpj/ValidacaoCnpjController.java:29-43`).
 - Banco: **existente — dev integrado** usa `postgres:16-alpine`, database
   `emporio` e role administrativa parametrizada por `POSTGRES_ADMIN_USER`;
   **planejado — produção** usa Supabase externo PostgreSQL 17
@@ -220,11 +242,12 @@ estão aposentados.
   runtime como `emporio_app`. Não copiar dados de produção. O contrato R2/SMTP
   por serviço e as gates ainda abertas estão em
   [`../../docs/staging-contract.md`](../../docs/staging-contract.md).
-- **Existente — artefatos Compose de staging (TASK-INFRA-020; implantação não verificada nesta sessão):** PostgreSQL
+- **Existente — artefatos e runtime reportado do Compose de staging
+   (TASK-INFRA-020/TASK-INFRA-026):** PostgreSQL
   `17-alpine` por digest, sem `ports:`; readiness `pg_isready`; named volume
   `emporio-staging_pgdata`. `db-bootstrap` usa Postgres CLI + File Mount
   `/bootstrap/roles.sql`; `migrate` usa imagem Backend `migrate`, ambos jobs
-  one-shot. API `prod,container`, porta 8080 sem publish e management 8081 com
+  one-shot. API `staging,container`, porta 8080 sem publish e management 8081 com
   bind em `10.254.30.10` na `metrics-net` interna — não mais loopback (health
   da imagem usa esse endereço); Front SSR porta 4000 sem publish e healthcheck
   Node em `localhost`; Radar API 8000 sem publish, health em `/health/ready` e
@@ -251,8 +274,11 @@ estão aposentados.
   staging e produção futura; substitui o teto inicial de 1,5 CPU/3 GiB). Os
   limites long-lived somam 1,75 CPU/3.375 GiB (incluindo o Prometheus) —
   dentro do teto, válido para o primeiro deploy — e jobs têm limites próprios.
-  Métricas de staging (Prometheus com `remote_write` no Compose) são artefato
-  **existente, não implantado**; logs via `dokploy-vector` → Grafana Cloud Loki
+   **Relato do operador (TASK-INFRA-026; não verificado independentemente nesta
+   auditoria):** todos os serviços staging estão healthy na VPS. Isso não
+   comprova scrape/remote_write nem substitui auditoria independente do deploy.
+   Métricas de staging (Prometheus com `remote_write` no Compose) são artefato
+   **existente, runtime não auditado independentemente**; logs via `dokploy-vector` → Grafana Cloud Loki
   seguem **planejados** (ver `arquitetura.md`/`decisoes.md`;
   `compose/docker-compose.staging.yml:121,154-155,206-214,295-342`).
 - **Existente — seed manual de admin de staging (não executado/verificado nesta
@@ -369,7 +395,7 @@ estão aposentados.
   resolvido pelo mapa de referência (fontes no irmão:
   `src/radar_middleware/infrastructure/observability/prometheus.py:77-80,124-165,240-248`,
   `src/radar_middleware/infrastructure/config.py:201-207`).
-- **Existente — staging, artefato não implantado:** o Compose de staging
+- **Existente — staging, artefato e runtime reportado:** o Compose de staging
   configura `METRICS_BIND_ADDRESS=10.254.31.30` e `METRICS_PORT=8082`; o
   listener fica somente na `radar-metrics-net` interna (`10.254.31.0/24`,
   Prometheus em `10.254.31.20`), sem publicação no host

@@ -18,6 +18,12 @@ configurada em 2026-11-13.
   Postgres/bootstrap; senha do migrador no bootstrap e migration job; senha da
   role runtime no bootstrap e API; credenciais Back, Radar e Tunnel somente nos
   respectivos serviços. Não guardar valores reais no repo.
+- A API do Backend roda com `SPRING_PROFILES_ACTIVE=staging,container`.
+  `APP_AUTH_RATE_LIMIT_KEY` é obrigatório e fica somente no Dokploy/Secrets
+  Provider; `APP_AUTH_TRUSTED_PROXIES` deve apontar para
+  `10.254.32.10/32` depois da validação da subnet e do peer efetivo do
+  `cloudflared`. Os limites de login do staging são 1 minuto, 10 falhas por
+  IP, 5 falhas por identidade e 20.000 chaves máximas.
 - As imagens `backend-java`, `front-angular` e `radar-middleware` precisam ser
   referências SHA imutáveis no GHCR, com manifest `linux/amd64,linux/arm64`.
   `__SET_STAGING_SHA__` no example é placeholder, não tag publicável/deployável.
@@ -147,8 +153,14 @@ produção). Logs seguem o caminho separado do `dokploy-vector` no host
 
 ## Redes e exposição
 
-- `apps` é interna: Front ↔ API ↔ cloudflared. Apenas API tem rede interna
-  `radar-net` em comum com o Radar.
+- `apps` é interna: Front ↔ API. O `cloudflared` alcança os serviços por
+  redes internas dedicadas: `tunnel-front` (cloudflared ↔ Front) e
+  `tunnel-api` (cloudflared ↔ API). O `tunnel-api` usa a subnet
+  `10.254.32.0/24`, com `cloudflared` em `10.254.32.10` e API em
+  `10.254.32.20`; `tunnel-front` usa `10.254.33.0/24`. A API confia no
+  `CF-Connecting-IP` somente do peer `10.254.32.10/32`, por meio de
+  `APP_AUTH_TRUSTED_PROXIES`. Essas subnets precisam ser conferidas contra
+  as redes existentes no host antes do deploy.
 - `database` é interna e sem portas publicadas: Postgres, jobs DB e API.
 - `metrics-net` é interna (subnet `10.254.30.0/24`): somente API (management
   em `10.254.30.10`) e Prometheus (`10.254.30.20`). `radar-metrics-net` é
