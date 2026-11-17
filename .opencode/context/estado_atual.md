@@ -117,6 +117,21 @@ Fotografia factual vigente. Não é cronologia de tasks.
    reais, primeiro login Access e auditoria independente do deploy/smoke não
    foram verificados nesta sessão. Ver
    [`../../docs/staging-contract.md`](../../docs/staging-contract.md).
+   **Existente — TASK-INFRA-027 (artefatos; execução não verificada nesta
+   sessão):** o staging contém serviços k6 somente no profile manual
+   `loadtest`: `loadtest` alcança a API por `loadtest-egress`,
+   `loadtest-api-radar` alcança `api:8080` pela `apps`, e `loadtest-radar`
+   alcança `radar:8000` pela `radar-net`. Não pertencem ao deploy normal, não
+   publicam portas e têm limites de 0,25 CPU/256M
+   (`compose/docker-compose.staging.yml:372-421`). A imagem fixa
+   `grafana/k6:0.55.0` por digest; o workflow valida os scripts e publica
+   `infra-loadtest:sha-<github.sha>` multiarch após o gate
+   (`loadtests/Dockerfile:1-5`; `.github/workflows/publish-loadtest.yml:22-81`).
+   O controlador exige `--confirm-staging`, seleciona alvos por cenário,
+   coleta `docker stats` temporário e escreve relatório sanitizado. Não houve
+   publicação GHCR, execução no Dokploy, Access autenticado ou runtime staging
+   verificados nesta sessão
+   (`scripts/load-ramp.sh:32-193`; `docs/load-testing.md:6-21,80-102`).
    **Relato do operador (TASK-INFRA-026; não verificado independentemente nesta
    auditoria):** todos os serviços staging estão healthy na VPS; no runtime,
    `tunnel-api` contém `cloudflared=10.254.32.10` e `api=10.254.32.20`, e

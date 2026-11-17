@@ -60,6 +60,7 @@ Não publicar uma imagem de produção como se fosse a imagem de staging.
 | Backend_Java | `ghcr.io/emporiob2b/backend-java` |
 | Front_Angular | `ghcr.io/emporiob2b/front-angular` |
 | Radar_Middleware_Python | `ghcr.io/emporiob2b/radar-middleware` |
+| Infra — harness de carga staging | `ghcr.io/emporiob2b/infra-loadtest` |
 
 - Pacotes GHCR são privados. O workflow usa `GITHUB_TOKEN`; `packages: write`
   fica restrito ao job de publicação. Os demais jobs mantêm apenas as
@@ -72,6 +73,9 @@ Não publicar uma imagem de produção como se fosse a imagem de staging.
   `BACKEND_IMAGE`, `FRONT_IMAGE` e `RADAR_IMAGE`, no formato
   `ghcr.io/emporiob2b/<imagem>:<sha-completo>`. Cada referência deve existir no
   GHCR e corresponder à publicação aprovada antes de iniciar o deploy.
+- O serviço manual de carga recebe `LOADTEST_IMAGE` no formato
+  `ghcr.io/emporiob2b/infra-loadtest:sha-<sha-completo>`; essa imagem só é
+  usada quando o profile `loadtest` é ativado.
 - Publicar manifest multiarch para `linux/amd64` e `linux/arm64`. Buildx/QEMU é
   a estratégia inicial; runner ARM nativo pode ser adotado se necessário. O
   build multiarch não substitui o smoke real no staging ARM64.
@@ -79,6 +83,13 @@ Não publicar uma imagem de produção como se fosse a imagem de staging.
   si só, uma garantia criptográfica de imutabilidade no registry: conferir o
   digest publicado durante a preparação do deploy e preservar esse dado no
   registro operacional do release. Não promover `latest`.
+
+O harness de carga da Infra é publicado pelo workflow
+`.github/workflows/publish-loadtest.yml` somente após a validação dos scripts,
+com a tag `sha-<SHA completo>` e manifest multiarch. Ele não contém segredos,
+não é publicado como `latest` e não dispara deploy. O operador seleciona
+manualmente a referência no `LOADTEST_IMAGE` do ambiente de staging, executando
+o serviço apenas com o profile `loadtest`.
 
 ## Artefato Infra de roles para o CI do Backend
 

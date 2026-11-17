@@ -137,7 +137,8 @@ services:
       loki:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health"]
+      test:
+        ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health"]
       interval: 10s
       timeout: 5s
       start_period: 20s
@@ -337,7 +338,11 @@ services:
       media-gateway:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent --show-error --max-time 2 http://$${MANAGEMENT_SERVER_ADDRESS}:8081/actuator/health"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl --fail --silent --show-error --max-time 2 http://$${MANAGEMENT_SERVER_ADDRESS}:8081/actuator/health",
+        ]
       interval: 5s
       timeout: 3s
       start_period: 40s
@@ -396,7 +401,11 @@ services:
       - radar_state:/var/lib/radar-middleware/state
     healthcheck:
       # A imagem não traz curl/wget; mesmo teste do compose local do Radar.
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')\""]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8000/health/ready'')"',
+        ]
       interval: 30s
       timeout: 5s
       start_period: 90s
@@ -440,7 +449,11 @@ services:
     volumes:
       - rustfs-data:/data
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent --show-error --max-time 2 http://127.0.0.1:9000/health"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl --fail --silent --show-error --max-time 2 http://127.0.0.1:9000/health",
+        ]
       interval: 2s
       timeout: 3s
       start_period: 5s
@@ -552,8 +565,16 @@ services:
         condition: service_healthy
     healthcheck:
       # O Dockerfile-dev não define HEALTHCHECK; mesma técnica fetch do Node
-      # usado no Dockerfile de produção do Front.
-      test: ["CMD", "node", "-e", "fetch('http://localhost:4200/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      # usado no Dockerfile de produção do Front. O alvo é a rota operacional
+      # silenciosa /healthz (TASK-SSR-HEALTHZ-SILENCIOSO-01): liveness puro,
+      # sem SSR, sem chamada ao Backend e sem eventos de log a cada probe.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:4200/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 10s
       timeout: 5s
       start_period: 90s

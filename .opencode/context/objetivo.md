@@ -26,6 +26,10 @@ fronteira forte de segurança; ver `vps_oracle.md` e `decisoes.md`.
 - Compose de produção (**planejado — produção**): `cloudflared`, front, api e
   radar; sem banco em container (o PostgreSQL do Back é o Supabase externo),
   no mesmo host OCI de staging por decisão do operador.
+- Harness de carga de staging (**existente — artefatos; execução não verificada
+  nesta sessão**): imagem k6, cenários API/Radar e rate limit, controlador manual
+  com confirmação explícita de staging e relatório sanitizado; exclusivo de
+  staging, sem deploy normal ou aprovação de capacidade.
 - CI/CD: **existente — workflow publisher Infra** de bootstrap de roles,
   versionado mas ainda não executado/verificado remotamente; Backend e Radar
   têm workflows CI/publicação versionados. **Existente — publicação verificada

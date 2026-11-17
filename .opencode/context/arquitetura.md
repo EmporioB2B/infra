@@ -188,6 +188,15 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
   e a soma dos dois stacks (24 GiB) não deixa folga de sistema se ambos
   estourarem simultaneamente — monitorar a folga real do host antes da produção
   entrar (`../../docs/staging-compose.md:106-118`).
+   **Existente — harness de carga manual (artefato, runtime não verificado):**
+   o Compose declara profile `loadtest` fora do deploy normal, com
+   `loadtest` (API público), `loadtest-api-radar` (API→Radar em `apps`) e
+   `loadtest-radar` (Radar direto em `radar-net`); nenhum publica portas.
+   `scripts/load-ramp.sh` exige confirmação de staging, recusa produção e
+   grava resumo sanitizado. O workflow valida e publica a imagem multiarch
+   (`compose/docker-compose.staging.yml:372-481`;
+   `scripts/load-ramp.sh:32-67,84-108`;
+   `.github/workflows/publish-loadtest.yml:22-81`).
    Todos os gates de imagem estão verificados (2026-11-13: imagens app ARM64
    multiarch via `imagetools inspect` + perfil staging do Front via `grep` na
    imagem; referências e evidência em `estado_atual.md`). **Existente — wiring

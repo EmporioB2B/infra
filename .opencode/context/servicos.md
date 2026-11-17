@@ -546,6 +546,31 @@ certificado gerado por `scripts/gen-dev-certs.sh`.
 O Radar **existente — dev** não é emulado: usa o R2 de teste real (restrição do
 `config.py`).
 
+## Harness de carga (somente staging/manual)
+
+- **Existente — artefatos, runtime não verificado nesta sessão:** `loadtests/Dockerfile`
+  fixa `grafana/k6:0.55.0` por digest e copia os cenários para a imagem
+  `ghcr.io/emporiob2b/infra-loadtest`. O workflow valida os scripts antes de
+  publicar em `linux/amd64,linux/arm64`, com tag `sha-<github.sha>`; publicação
+  GHCR e execução no Dokploy não foram verificadas nesta sessão.
+- Os scripts usam os contratos vigentes dos irmãos: login
+  `POST /api/v1/auth/login` com `{email, senha}` e resposta `accessToken`
+  (`../Backend_Java_Cliente/src/main/java/br/com/emporio/clientes/auth/api/sessao/LoginController.java:23-48`);
+  consulta API→Radar `POST /api/v1/administracao/organizacoes/consultar-cnpj`
+  (`../Backend_Java_Cliente/src/main/java/br/com/emporio/clientes/administracao/api/organizacao/ConsultarOrganizacaoPorCnpjController.java:19-36`);
+  Radar direto `GET /internal/v1/ceps/{cep}` e
+  `GET /internal/v1/empresas/{cnpj}/estabelecimento`
+  (`../Radar_Middleware_Python/src/radar_middleware/api/routers/cep.py:35-40`;
+  `../Radar_Middleware_Python/src/radar_middleware/api/routers/empresas.py:121-139`).
+- `scripts/load-ramp.sh` aceita apenas confirmação literal `staging`, recusa
+  host de produção nos módulos k6, executa serviços perfilados sem `ports:`,
+  remove somente o container temporário e gera resumo sem tokens, senhas,
+  cookies, headers ou corpos (`scripts/load-ramp.sh:32-36,84-108,124-189`;
+  `loadtests/common.js:15-41`; `docs/load-testing.md:80-102`). O cenário
+  `login-rate-limit` usa senha inválida e espera `429` com `Retry-After`;
+  exige janela de carga separada (`loadtests/login-rate-limit.js:23-39`;
+  `docs/load-testing.md:93-95`).
+
 ## Observabilidade de logs
 
 - **Existente — dev:** `loki` usa `grafana/loki:3.5.1`, escuta `3100` somente

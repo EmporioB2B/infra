@@ -1,5 +1,13 @@
 name: emporio-staging
 
+x-loadtest-environment: &loadtest-environment
+  K6_LOGIN_EMAIL: ${LOADTEST_LOGIN_EMAIL:?email do usuário de teste do loadtest obrigatória}
+  K6_LOGIN_PASSWORD: ${LOADTEST_LOGIN_PASSWORD:?senha do usuário de teste do loadtest obrigatória}
+  K6_ORIGIN: ${LOADTEST_ORIGIN:-https://staging.emporiob2b.com.br}
+  K6_CNPJ: ${LOADTEST_CNPJ:?CNPJ público de fixture do loadtest obrigatório}
+  K6_CEP: ${LOADTEST_CEP:?CEP público de fixture do loadtest obrigatório}
+  K6_NO_USAGE_REPORT: "true"
+
 services:
   postgres:
     image: ${POSTGRES_IMAGE:?POSTGRES_IMAGE deve ser um digest PostgreSQL 17 aprovado}
@@ -361,6 +369,57 @@ services:
           cpus: "0.25"
           memory: 512M
 
+  # Execução manual e efêmera. Os serviços não pertencem ao deploy normal:
+  # scripts/load-ramp.sh seleciona o serviço perfilado com a rede mínima.
+  x-loadtest-common: &loadtest-common
+    image: ${LOADTEST_IMAGE:?LOADTEST_IMAGE precisa ser a imagem k6 do harness pinada}
+    pull_policy: always
+    profiles: ["loadtest"]
+    entrypoint: ["k6"]
+    environment: *loadtest-environment
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+
+  loadtest:
+    <<: *loadtest-common
+    command: ["run", "/opt/emporio/loadtests/api-radar.js"]
+    environment:
+      <<: *loadtest-environment
+      K6_ACCESS_CLIENT_ID: ${LOADTEST_ACCESS_CLIENT_ID:-}
+      K6_ACCESS_CLIENT_SECRET: ${LOADTEST_ACCESS_CLIENT_SECRET:-}
+      K6_MODE: public
+    networks:
+      - loadtest-egress
+
+  loadtest-api-radar:
+    <<: *loadtest-common
+    command: ["run", "/opt/emporio/loadtests/api-radar.js"]
+    environment:
+      <<: *loadtest-environment
+      K6_MODE: internal
+    networks:
+      - apps
+
+  loadtest-radar:
+    <<: *loadtest-common
+    command: ["run", "/opt/emporio/loadtests/radar-cnpj.js"]
+    environment:
+      <<: *loadtest-environment
+      K6_MODE: direct-radar
+    networks:
+      - radar-net
+
 networks:
   apps:
     name: emporio-staging_apps
@@ -417,6 +476,9 @@ networks:
           gateway: 10.254.31.1
   prometheus-egress:
     name: emporio-staging_prometheus-egress
+    driver: bridge
+  loadtest-egress:
+    name: emporio-staging_loadtest-egress
     driver: bridge
 
 volumes:
