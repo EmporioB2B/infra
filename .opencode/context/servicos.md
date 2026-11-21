@@ -288,15 +288,21 @@ estão aposentados.
   healthy e confirmação interativa, e é independente dos jobs
   `db-bootstrap`/`migrate`, API e deploy. Após as migrations, cria/atualiza
   `admin@emporiob2b.com.br` e concede `ADMIN_NEGOCIO` no escopo `PLATAFORMA`
-  com nove capacidades administrativas; a senha é solicitada sem eco, vira
+  com as 10 capacidades catalogadas em V2 para `PLATAFORMA`, incluindo
+  `ADMIN_GERENCIAR_ESTABELECIMENTO` usado pelo mapa administrativo e pelos
+  fluxos de filiais; as 14 capacidades `ORGANIZACAO` não são concedidas ao
+  vínculo `PLATAFORMA`. A senha é solicitada sem eco, vira
   BCrypt custo 12; somente o hash é persistido no banco. Reexecução substitui a
   senha, e o seed não cria `perfil_usuario`. A V1 do Backend cria a organização `Emporio B2B` ativa do
   tipo `PLATAFORMA`. Tratar a conta como superusuário: operação manual somente
   em staging, nunca produção. O operador relata staging funcional, mas VPS,
   staging e execução do seed não foram verificados nesta sessão
-  (`scripts/seed-admin-staging.sh:2-3,6-18,21-41,44-65,67-92,94-130,132-174,177-191`;
+  (`scripts/seed-admin-staging.sh:2-3,6-18,21-41,44-65,67-92,94-139,141-180,183-195`;
   `../../docs/staging-compose.md:62-78`;
-  `../Backend_Java/src/main/resources/db/migration/V1__fundacao_clientes.sql:92-96`).
+  `../Backend_Java_Cliente/src/main/resources/db/migration/V1__fundacao_clientes.sql:92-96`;
+  `../Backend_Java_Cliente/src/main/resources/db/migration/V2__autenticacao_autorizacao.sql:376-413`;
+  `../Backend_Java_Cliente/src/main/java/br/com/emporio/clientes/estabelecimentos/application/mapa/BuscarEnderecoMapaApplicationService.java:88`;
+  `../Backend_Java_Cliente/src/main/java/br/com/emporio/clientes/estabelecimentos/application/EstabelecimentoAutorizacao.java:77`).
 - **Existente — Fase 2, Compose dev integrado:** a sequência é
   `postgres → db-bootstrap → migrate → backend`. `db-bootstrap` usa a
   credencial administrativa, monta `database/bootstrap/roles.sql` read-only e
@@ -361,7 +367,7 @@ estão aposentados.
   Flyway automático permanece desabilitado no serviço API (`compose/docker-compose.dev.yml:340-353`; `Backend_Java/src/main/resources/application.yml:37-40`; `Backend_Java/src/main/resources/application-container.yml:2-12`).
 - **Validação integrada dev (2026-11-09):** `scripts/up-dev.sh --no-build`
   concluiu jobs e healthchecks; seed repetido manteve admin, vínculo, papel e
-  nove capacidades; `scripts/smoke.sh` passou. O preflight identificou
+  as capacidades administrativas; `scripts/smoke.sh` passou. O preflight identificou
   `Backend_Java` em `main` no SHA `8eed3342dfecb4656df68d712dff1ef5389668d4`,
   mas `--no-build` reutilizou imagem local e não comprova sua origem. Os
   volumes legados foram mantidos. A validação não abrange Supabase/produção

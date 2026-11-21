@@ -55,6 +55,7 @@ unset ADMIN_PASSWORD_CONFIRM
 
 # O Backend usa BCrypt com custo 12. A senha nao e passada em argv nem impressa.
 if command -v htpasswd >/dev/null 2>&1; then
+  # shellcheck disable=SC2016
   HASH="$(printf '%s\n' "$ADMIN_PASSWORD" | htpasswd -niBC 12 x \
     | cut -d: -f2 | tr -d '\r\n' | sed 's|^\$2y\$|\$2b\$|')"
 elif python3 -c 'import bcrypt' >/dev/null 2>&1; then
@@ -125,12 +126,9 @@ SELECT gen_random_uuid(), v.id, v.organizacao_id, 'ADMIN_NEGOCIO', 'PLATAFORMA',
           AND p.papel = 'ADMIN_NEGOCIO' AND p.status = 'ATIVO'
    );
 
-WITH capacidades(codigo) AS (
-    VALUES ('ADMIN_GERENCIAR_CADASTRO'), ('ADMIN_GERENCIAR_CATEGORIA'),
-           ('ADMIN_GERENCIAR_CARACTERISTICA'), ('ADMIN_GERENCIAR_MARCA'),
-           ('ADMIN_GERENCIAR_PRODUTO'), ('ADMIN_GERENCIAR_MERCADORIA'),
-           ('ADMIN_GERENCIAR_OFERTA'), ('ADMIN_PUBLICAR_OFERTA'), ('GESTAO_ADMIN')
-)
+ WITH capacidades(codigo) AS (
+     SELECT codigo FROM capacidade WHERE contexto = 'PLATAFORMA'
+ )
 INSERT INTO vinculo_capacidade (id, vinculo_id, organizacao_id, capacidade_codigo, concedida_em)
 SELECT gen_random_uuid(), v.id, v.organizacao_id, c.codigo, now()
   FROM vinculo v CROSS JOIN capacidades c
@@ -169,18 +167,17 @@ SELECT count(*) = 1 AS role_ok FROM vinculo_papel
 \quit 1
 \endif
 
-SELECT count(*) = 9 AS capabilities_ok FROM vinculo_capacidade
- WHERE vinculo_id = :'vid'::uuid AND organizacao_id = :'org'::uuid
-   AND revogada_em IS NULL AND capacidade_codigo IN (
-       'ADMIN_GERENCIAR_CADASTRO', 'ADMIN_GERENCIAR_CATEGORIA',
-       'ADMIN_GERENCIAR_CARACTERISTICA', 'ADMIN_GERENCIAR_MARCA',
-       'ADMIN_GERENCIAR_PRODUTO', 'ADMIN_GERENCIAR_MERCADORIA',
-       'ADMIN_GERENCIAR_OFERTA', 'ADMIN_PUBLICAR_OFERTA', 'GESTAO_ADMIN'
-   );
+SELECT count(*) = (
+    SELECT count(*) FROM capacidade WHERE contexto = 'PLATAFORMA'
+) AS capabilities_ok
+  FROM vinculo_capacidade vc
+  JOIN capacidade c ON c.codigo = vc.capacidade_codigo
+ WHERE vc.vinculo_id = :'vid'::uuid AND vc.organizacao_id = :'org'::uuid
+   AND vc.revogada_em IS NULL AND c.contexto = 'PLATAFORMA';
 \gset check_
 \if :check_capabilities_ok
 \else
-\echo 'ERRO: capacidades administrativas incompletas; transacao revertida'
+\echo 'ERRO: capacidades administrativas de PLATAFORMA incompletas; transacao revertida'
 \quit 1
 \endif
 

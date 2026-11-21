@@ -129,19 +129,10 @@ SELECT gen_random_uuid(), v.id, v.organizacao_id, 'ADMIN_NEGOCIO', 'PLATAFORMA',
            AND p.status  = 'ATIVO'
    );
 
--- Todas as capacidades de plataforma catalogadas em V2. A linha de
+-- Todas as capacidades de plataforma catalogadas. A linha de
 -- vinculo_capacidade também exige concedida_em explícito e não tem default.
 WITH capacidades(codigo) AS (
-    VALUES
-        ('ADMIN_GERENCIAR_CADASTRO'),
-        ('ADMIN_GERENCIAR_CATEGORIA'),
-        ('ADMIN_GERENCIAR_CARACTERISTICA'),
-        ('ADMIN_GERENCIAR_MARCA'),
-        ('ADMIN_GERENCIAR_PRODUTO'),
-        ('ADMIN_GERENCIAR_MERCADORIA'),
-        ('ADMIN_GERENCIAR_OFERTA'),
-        ('ADMIN_PUBLICAR_OFERTA'),
-        ('GESTAO_ADMIN')
+    SELECT codigo FROM capacidade WHERE contexto = 'PLATAFORMA'
 )
 INSERT INTO vinculo_capacidade (
     id, vinculo_id, organizacao_id, capacidade_codigo, concedida_em
@@ -202,21 +193,19 @@ SELECT count(*) = 1 AS admin_papel_ok
 \quit 1
 \endif
 
-SELECT count(*) = 9 AS admin_capacidades_ok
-  FROM vinculo_capacidade
- WHERE vinculo_id = :'vid'::uuid
-   AND organizacao_id = :'org'::uuid
-   AND revogada_em IS NULL
-   AND capacidade_codigo IN (
-       'ADMIN_GERENCIAR_CADASTRO', 'ADMIN_GERENCIAR_CATEGORIA',
-       'ADMIN_GERENCIAR_CARACTERISTICA', 'ADMIN_GERENCIAR_MARCA',
-       'ADMIN_GERENCIAR_PRODUTO', 'ADMIN_GERENCIAR_MERCADORIA',
-       'ADMIN_GERENCIAR_OFERTA', 'ADMIN_PUBLICAR_OFERTA', 'GESTAO_ADMIN'
-   );
+SELECT count(*) = (
+    SELECT count(*) FROM capacidade WHERE contexto = 'PLATAFORMA'
+) AS admin_capacidades_ok
+  FROM vinculo_capacidade vc
+  JOIN capacidade c ON c.codigo = vc.capacidade_codigo
+ WHERE vc.vinculo_id = :'vid'::uuid
+   AND vc.organizacao_id = :'org'::uuid
+   AND vc.revogada_em IS NULL
+   AND c.contexto = 'PLATAFORMA';
 \gset check_
 \if :check_admin_capacidades_ok
 \else
-\echo 'ERRO: o superusuário não possui as nove capacidades administrativas'
+\echo 'ERRO: o superusuário não possui todas as capacidades de PLATAFORMA'
 \quit 1
 \endif
 

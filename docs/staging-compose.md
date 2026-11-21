@@ -84,7 +84,7 @@ senha exclusiva de staging, diferente da produção.
 
 O seed é deliberadamente manual e **não** é dependência de `db-bootstrap`,
 `migrate`, API ou deploy. Ele concede `ADMIN_NEGOCIO` no escopo `PLATAFORMA` e
-as nove capacidades administrativas do seed dev; isso equivale a um
+todas as capacidades catalogadas com contexto `PLATAFORMA`; isso equivale a um
 superusuário de staging. A senha em claro não é gravada nem impressa (somente o
 hash BCrypt é persistido no banco). A operação só
 altera o banco se a verificação explícita do alvo passar; não rode em produção.

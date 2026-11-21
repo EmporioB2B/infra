@@ -344,21 +344,25 @@ Fotografia factual vigente. Não é cronologia de tasks.
   usuário administrativo configurado pelo serviço e define o `search_path`
   para `identidade,pg_catalog`; semeia, em uma
   transação, o usuário de teste, o vínculo `ATIVO` na organização
-  `PLATAFORMA`, o papel `ADMIN_NEGOCIO`/`PLATAFORMA` e as nove capacidades
-  administrativas de plataforma. A senha do fixture vem de
+  `PLATAFORMA`, o papel `ADMIN_NEGOCIO`/`PLATAFORMA` e as 10 capacidades
+  administrativas de plataforma catalogadas pela V2, incluindo
+  `ADMIN_GERENCIAR_ESTABELECIMENTO`, usado pelo mapa administrativo e pelos
+  fluxos de filiais. As 14 capacidades de contexto `ORGANIZACAO` não são
+  concedidas ao vínculo `PLATAFORMA`. A senha do fixture vem de
   `ADMIN_DEV_PASSWORD` no ambiente local ignorado e não é impressa. O fixture
   continua somente de dev e não cria `perfil_usuario` (fonte do artefato:
-  `scripts/seed-admin-dev.sh:46-49,84-249`;
-  schema/contratos: `Backend_Java/src/main/resources/db/migration/V2__autenticacao_autorizacao.sql:109-145,376-424`).
+  `scripts/seed-admin-dev.sh:46-49,132-209`;
+  schema/contratos: `../Backend_Java_Cliente/src/main/resources/db/migration/V2__autenticacao_autorizacao.sql:376-413,455-515`).
 - **Limitação existente — dev:** `scripts/seed-admin-dev.sh` só pode rodar
   depois que o Postgres novo estiver saudável e o serviço one-shot `migrate`
   tiver aplicado o schema vigente; o SQL do seed define `search_path` para
   `identidade,catalogo,mercadoria,comercial,infraestrutura,venda,pedidos,public`.
-  Ele cria o usuário, vínculo, papel e nove
-  capacidades, mas não cria `perfil_usuario`. É um seed local do Back, não uma
-  preparação de produção (`scripts/seed-admin-dev.sh:46-49,92-94,204-250`,
-  `Backend_Java/src/main/resources/application.yml:37-39`,
-  `Backend_Java/src/main/resources/db/migration/V2__autenticacao_autorizacao.sql:16-60`).
+  Ele cria o usuário, vínculo, papel e todas as 10 capacidades de
+  `PLATAFORMA`, mas não cria `perfil_usuario`; não concede as 14 capacidades
+  de `ORGANIZACAO`. É um seed local do Back, não uma preparação de produção
+  (`scripts/seed-admin-dev.sh:46-49,93-94,132-209`,
+   `../Backend_Java_Cliente/src/main/resources/application.yml:37-39`,
+  `../Backend_Java_Cliente/src/main/resources/db/migration/V2__autenticacao_autorizacao.sql:376-413`).
 - **Existente — seed manual de admin do staging (artefato; execução não verificada nesta sessão):**
   `scripts/seed-admin-staging.sh --confirm-staging` é uma operação separada do
   bootstrap, migration, API e deploy; exige acesso ao daemon Docker que gerencia
@@ -368,14 +372,20 @@ Fotografia factual vigente. Não é cronologia de tasks.
   Solicita senha sem eco, gera BCrypt custo 12 e executa seed idempotente em
   transação usando a credencial administrativa dentro do container. Cria/atualiza
   `admin@emporiob2b.com.br`, ativa o vínculo e concede `ADMIN_NEGOCIO` com escopo
-  `PLATAFORMA` e nove capacidades administrativas. A migration V1 do Backend,
+  `PLATAFORMA` e todas as 10 capacidades catalogadas em V2 para
+  `PLATAFORMA`; as 14 de `ORGANIZACAO` não são concedidas. A capacidade
+  `ADMIN_GERENCIAR_ESTABELECIMENTO` é usada pelo mapa administrativo e pelos
+  fluxos de filiais. A migration V1 do Backend,
   não o seed, cria a organização ativa `Emporio B2B` (`PLATAFORMA`). O resultado
   equivale a superusuário de staging; não usar em produção. A senha em claro não
   é gravada nem impressa (somente o hash BCrypt fica no banco); ao repetir a
   execução, a senha informada é substituída. Não cria `perfil_usuario`
-  (`scripts/seed-admin-staging.sh:2-3,6-18,21-41,44-65,67-92,94-130,132-174,177-191`;
+  (`scripts/seed-admin-staging.sh:2-3,6-18,21-41,44-65,67-92,94-139,141-180,183-195`;
   `../../docs/staging-compose.md:62-78`;
-  `../Backend_Java/src/main/resources/db/migration/V1__fundacao_clientes.sql:92-96`).
+  `../Backend_Java_Cliente/src/main/resources/db/migration/V1__fundacao_clientes.sql:92-96`;
+  `../Backend_Java_Cliente/src/main/resources/db/migration/V2__autenticacao_autorizacao.sql:376-413`;
+  `../Backend_Java_Cliente/src/main/java/br/com/emporio/clientes/estabelecimentos/application/mapa/BuscarEnderecoMapaApplicationService.java:88`;
+  `../Backend_Java_Cliente/src/main/java/br/com/emporio/clientes/estabelecimentos/application/EstabelecimentoAutorizacao.java:77`).
   O operador informou que staging está funcional, mas esta sessão não acessou
   VPS/staging nem executou o seed; funcionamento e resultado em runtime não
   foram verificados independentemente.
