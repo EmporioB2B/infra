@@ -131,11 +131,14 @@ Fotografia factual vigente. Não é cronologia de tasks.
    `grafana/k6:0.55.0` por digest; o workflow valida os scripts e publica
    `infra-loadtest:sha-<github.sha>` multiarch após o gate
    (`loadtests/Dockerfile:1-5`; `.github/workflows/publish-loadtest.yml:22-81`).
-   O controlador exige `--confirm-staging`, seleciona alvos por cenário,
-   coleta `docker stats` temporário e escreve relatório sanitizado. Não houve
+   O controlador exige `--confirm-staging`, aceita `--env-file` e repassa esse
+   arquivo ao Compose; o arquivo protegido deve conter todas as variáveis de
+   interpolação exigidas pelo Compose, não deve ser versionado nem impresso.
+   Coleta `docker stats` temporário e escreve relatório sanitizado. Não houve
    publicação GHCR, execução no Dokploy, Access autenticado ou runtime staging
    verificados nesta sessão
-   (`scripts/load-ramp.sh:32-193`; `docs/load-testing.md:6-21,80-102`).
+   (`scripts/load-ramp.sh:28-42,115-124`; `compose/docker-compose.staging.yml:3-9,13-18`;
+   `env/.env.staging.example:1-4,107-116`; `docs/load-testing.md:46-52`).
    **Relato do operador (TASK-INFRA-026; não verificado independentemente nesta
    auditoria):** todos os serviços staging estão healthy na VPS; no runtime,
    `tunnel-api` contém `cloudflared=10.254.32.10` e `api=10.254.32.20`, e

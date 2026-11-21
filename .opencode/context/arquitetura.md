@@ -195,10 +195,12 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
    O controlador valida somente `apps`/`radar-net` conforme o cenário; a
    `loadtest-egress` do cenário público é criada pelo `docker compose run`,
    não é pré-condição verificada pelo script.
-   `scripts/load-ramp.sh` exige confirmação de staging, recusa produção e
-   grava resumo sanitizado. O workflow valida e publica a imagem multiarch
+   `scripts/load-ramp.sh` exige confirmação de staging, recusa produção, aceita
+   `--env-file` e o repassa ao Compose; esse arquivo protegido precisa conter
+   todas as variáveis de interpolação do Compose e não deve ser versionado nem
+   impresso. Grava resumo sanitizado. O workflow valida e publica a imagem multiarch
    (`compose/docker-compose.staging.yml:372-481`;
-   `scripts/load-ramp.sh:38-78,84-116`;
+   `scripts/load-ramp.sh:28-42,84-124`;
    `.github/workflows/publish-loadtest.yml:22-81`).
    Todos os gates de imagem estão verificados (2026-11-13: imagens app ARM64
    multiarch via `imagetools inspect` + perfil staging do Front via `grep` na

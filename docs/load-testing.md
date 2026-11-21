@@ -47,7 +47,8 @@ Calibração pública:
 scripts/load-ramp.sh \
   --confirm-staging \
   --scenario public \
-  --plan calibration
+  --plan calibration \
+  --env-file /caminho/protegido/staging.env
 ```
 
 API interno:
@@ -56,7 +57,8 @@ API interno:
 scripts/load-ramp.sh \
   --confirm-staging \
   --scenario api-radar \
-  --plan calibration
+  --plan calibration \
+  --env-file /caminho/protegido/staging.env
 ```
 
 Radar direto:
@@ -65,7 +67,8 @@ Radar direto:
 scripts/load-ramp.sh \
   --confirm-staging \
   --scenario radar-cnpj \
-  --plan calibration
+  --plan calibration \
+  --env-file /caminho/protegido/staging.env
 ```
 
 Rate limit, em execução separada:
@@ -73,7 +76,8 @@ Rate limit, em execução separada:
 ```bash
 scripts/load-ramp.sh \
   --confirm-staging \
-  --scenario login-rate-limit
+  --scenario login-rate-limit \
+  --env-file /caminho/protegido/staging.env
 ```
 
 A rampa `full` usa `1 req/s` por 60s, `2 req/s` por 120s, `5 req/s` por 120s

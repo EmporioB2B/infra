@@ -10,7 +10,7 @@ usage() {
 uso:
   scripts/load-ramp.sh --confirm-staging \
     --scenario public|api-radar|radar-cnpj|login-rate-limit \
-    [--plan calibration|full] [--report ARQUIVO]
+    [--plan calibration|full] [--env-file ARQUIVO] [--report ARQUIVO]
 EOF
   exit 2
 }
@@ -18,12 +18,14 @@ EOF
 confirmation=''
 scenario=''
 plan='calibration'
+env_file=''
 report=''
 while (($#)); do
   case "$1" in
     --confirm-staging) confirmation='staging'; shift ;;
     --scenario) scenario="${2:?valor ausente para --scenario}"; shift 2 ;;
     --plan) plan="${2:?valor ausente para --plan}"; shift 2 ;;
+    --env-file) env_file="${2:?valor ausente para --env-file}"; shift 2 ;;
     --report) report="${2:?valor ausente para --report}"; shift 2 ;;
     *) usage ;;
   esac
@@ -34,6 +36,10 @@ done
 [[ "$plan" =~ ^(calibration|full)$ ]] || usage
 command -v docker >/dev/null 2>&1 || { printf '%s\n' 'docker não encontrado' >&2; exit 1; }
 docker info >/dev/null 2>&1 || { printf '%s\n' 'daemon Docker inacessível' >&2; exit 1; }
+if [[ -n "$env_file" && ! -f "$env_file" ]]; then
+  printf 'arquivo env não encontrado: %s\n' "$env_file" >&2
+  exit 1
+fi
 
 case "$scenario" in
   public)
@@ -107,7 +113,9 @@ docker events \
 events_pid=$!
 
 set +e
-docker compose -f "$COMPOSE_FILE" --profile loadtest run \
+compose_args=(-f "$COMPOSE_FILE")
+[[ -z "$env_file" ]] || compose_args=(--env-file "$env_file" "${compose_args[@]}")
+docker compose "${compose_args[@]}" --profile loadtest run \
   --name "$container_name" \
   --no-deps \
   -e "K6_BASE_URL=$base_url" \
