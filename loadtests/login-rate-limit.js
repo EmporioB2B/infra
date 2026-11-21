@@ -6,6 +6,7 @@ import { env, headers, targetUrl } from './common.js';
 const rateLimitResponses = new Counter('login_rate_limit_429');
 
 export const options = {
+  summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
   scenarios: {
     login_rate_limit: {
       executor: 'per-vu-iterations',

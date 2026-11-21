@@ -141,10 +141,13 @@ Fotografia factual vigente. Não é cronologia de tasks.
    relatório e coletar apenas o loadtest
    (`scripts/sample-container-stats.sh:33-35`). O parser
    vigente lê as métricas k6 diretamente em `metrics.http_req_duration`,
-   `metrics.http_reqs` e `metrics.checks`; relatórios de execuções anteriores
-   podem ter latência e throughput nulos por incompatibilidade com o formato
-   então esperado, portanto é necessária uma nova execução para obter
-   resultados confiáveis (`scripts/load-ramp.sh:154-165,196-215`). Não houve
+   `metrics.http_reqs` e `metrics.checks`; os três cenários agora solicitam
+   explicitamente `p(99)` em `summaryTrendStats`, mas relatórios de execuções
+   anteriores podem ter p99 (e outras métricas) nulo por incompatibilidade com
+   o formato então esperado. Portanto, é necessária uma nova execução para
+   obter p99 confiável (`loadtests/api-radar.js:6`,
+   `loadtests/login-rate-limit.js:9`, `loadtests/radar-cnpj.js:6`;
+   `scripts/load-ramp.sh:154-165,196-215`). Não houve
    publicação GHCR, execução no Dokploy, Access autenticado ou runtime staging
    verificados nesta sessão
    (`scripts/load-ramp.sh:28-42,115-124`; `compose/docker-compose.staging.yml:3-9,13-18`;

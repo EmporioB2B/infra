@@ -3,6 +3,7 @@ import { check } from 'k6';
 import { fixture, planStages, targetUrl } from './common.js';
 
 export const options = {
+  summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
   scenarios: {
     radar_cnpj: {
       executor: 'ramping-arrival-rate',
