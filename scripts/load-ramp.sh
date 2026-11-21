@@ -159,9 +159,9 @@ import sys
 summary_path, stats_path, events_path, images_path, report_path, run_id, scenario, plan, mode, status, started_at, finished_at, infra_sha = sys.argv[1:]
 summary = json.loads(pathlib.Path(summary_path).read_text())
 metrics = summary.get("metrics", {})
-duration = metrics.get("http_req_duration", {}).get("values", {})
-requests = metrics.get("http_reqs", {}).get("values", {})
-checks = metrics.get("checks", {}).get("values", {})
+duration = metrics.get("http_req_duration", {})
+requests = metrics.get("http_reqs", {})
+checks = metrics.get("checks", {})
 
 containers = {}
 for line in pathlib.Path(stats_path).read_text().splitlines()[1:]:

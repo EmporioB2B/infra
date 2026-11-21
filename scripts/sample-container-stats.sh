@@ -30,7 +30,10 @@ start="$(date +%s)"
   while :; do
     now="$(date +%s)"
     (( now - start >= duration )) && break
-    mapfile -t ids < <(docker ps --filter 'label=com.docker.compose.project=emporio-staging' --format '{{.ID}}')
+    mapfile -t ids < <(
+      docker ps --format '{{.ID}}\t{{.Label "com.docker.compose.project"}}' |
+        awk -F '\t' '$2 == "emporio-staging" || index($2, "emporio-staging-") == 1 {print $1}'
+    )
     if ((${#ids[@]})); then
       docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.BlockIO}}\t{{.NetIO}}\t{{.PIDs}}' "${ids[@]}" |
         while IFS=$'\t' read -r name cpu memory memory_percent block_io network_io pids; do

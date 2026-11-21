@@ -134,7 +134,17 @@ Fotografia factual vigente. Não é cronologia de tasks.
    O controlador exige `--confirm-staging`, aceita `--env-file` e repassa esse
    arquivo ao Compose; o arquivo protegido deve conter todas as variáveis de
    interpolação exigidas pelo Compose, não deve ser versionado nem impresso.
-   Coleta `docker stats` temporário e escreve relatório sanitizado. Não houve
+   Coleta `docker stats` temporário e escreve relatório sanitizado. A seleção
+   dos containers usa o label `com.docker.compose.project` e aceita tanto a
+   base `emporio-staging` quanto projetos Dokploy com sufixo
+   (`emporio-staging-*`); o filtro exato anterior podia deixar o stack fora do
+   relatório e coletar apenas o loadtest
+   (`scripts/sample-container-stats.sh:33-35`). O parser
+   vigente lê as métricas k6 diretamente em `metrics.http_req_duration`,
+   `metrics.http_reqs` e `metrics.checks`; relatórios de execuções anteriores
+   podem ter latência e throughput nulos por incompatibilidade com o formato
+   então esperado, portanto é necessária uma nova execução para obter
+   resultados confiáveis (`scripts/load-ramp.sh:154-165,196-215`). Não houve
    publicação GHCR, execução no Dokploy, Access autenticado ou runtime staging
    verificados nesta sessão
    (`scripts/load-ramp.sh:28-42,115-124`; `compose/docker-compose.staging.yml:3-9,13-18`;
