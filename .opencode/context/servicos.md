@@ -570,9 +570,13 @@ O Radar **existente — dev** não é emulado: usa o R2 de teste real (restriç�
   `../Radar_Middleware_Python/src/radar_middleware/api/routers/empresas.py:121-139`).
 - `scripts/load-ramp.sh` aceita apenas confirmação literal `staging`, recusa
   host de produção nos módulos k6, executa serviços perfilados sem `ports:`,
-  remove somente o container temporário e gera resumo sem tokens, senhas,
+  verifica previamente apenas a rede `apps` ou `radar-net` exigida pelo
+  cenário; a rede `loadtest-egress` do serviço público é criada pelo
+  `docker compose run`. Remove somente o container temporário e gera resumo
+  sem tokens, senhas,
   cookies, headers ou corpos (`scripts/load-ramp.sh:32-36,84-108,124-189`;
-  `loadtests/common.js:15-41`; `docs/load-testing.md:80-102`). O cenário
+  `scripts/load-ramp.sh:38-78,109-116`;
+  `loadtests/common.js:15-41`; `docs/load-testing.md:15-20,80-102`). O cenário
   `login-rate-limit` usa senha inválida e espera `429` com `Retry-After`;
   exige janela de carga separada (`loadtests/login-rate-limit.js:23-39`;
   `docs/load-testing.md:93-95`).

@@ -119,11 +119,15 @@ Fotografia factual vigente. Não é cronologia de tasks.
    [`../../docs/staging-contract.md`](../../docs/staging-contract.md).
    **Existente — TASK-INFRA-027 (artefatos; execução não verificada nesta
    sessão):** o staging contém serviços k6 somente no profile manual
-   `loadtest`: `loadtest` alcança a API por `loadtest-egress`,
+   `loadtest`: `loadtest` alcança a API por `loadtest-egress`; o controlador
+   exige previamente somente `emporio-staging_apps` ou
+   `emporio-staging_radar-net`, conforme o cenário, e deixa `docker compose
+   run` criar `loadtest-egress` quando necessário,
    `loadtest-api-radar` alcança `api:8080` pela `apps`, e `loadtest-radar`
    alcança `radar:8000` pela `radar-net`. Não pertencem ao deploy normal, não
    publicam portas e têm limites de 0,25 CPU/256M
-   (`compose/docker-compose.staging.yml:372-421`). A imagem fixa
+   (`compose/docker-compose.staging.yml:372-421`;
+   `scripts/load-ramp.sh:38-78,109-116`). A imagem fixa
    `grafana/k6:0.55.0` por digest; o workflow valida os scripts e publica
    `infra-loadtest:sha-<github.sha>` multiarch após o gate
    (`loadtests/Dockerfile:1-5`; `.github/workflows/publish-loadtest.yml:22-81`).

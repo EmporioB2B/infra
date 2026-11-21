@@ -37,28 +37,28 @@ docker info >/dev/null 2>&1 || { printf '%s\n' 'daemon Docker inacessível' >&2;
 
 case "$scenario" in
   public)
-    network="${PROJECT}_loadtest-egress"
+    required_network="${PROJECT}_apps"
     service='loadtest'
     base_url='https://api-staging.emporiob2b.com.br'
     mode='public'
     script='/opt/emporio/loadtests/api-radar.js'
     ;;
   api-radar)
-    network="${PROJECT}_apps"
+    required_network="${PROJECT}_apps"
     service='loadtest-api-radar'
     base_url='http://api:8080'
     mode='internal'
     script='/opt/emporio/loadtests/api-radar.js'
     ;;
   radar-cnpj)
-    network="${PROJECT}_radar-net"
+    required_network="${PROJECT}_radar-net"
     service='loadtest-radar'
     base_url='http://radar:8000'
     mode='direct-radar'
     script='/opt/emporio/loadtests/radar-cnpj.js'
     ;;
   login-rate-limit)
-    network="${PROJECT}_loadtest-egress"
+    required_network="${PROJECT}_apps"
     service='loadtest'
     base_url='https://api-staging.emporiob2b.com.br'
     mode='public'
@@ -67,10 +67,15 @@ case "$scenario" in
     ;;
 esac
 
-docker network inspect "$network" >/dev/null 2>&1 || {
-  printf 'rede ausente: %s; suba o staging antes da execução\n' "$network" >&2
+docker network inspect "$required_network" >/dev/null 2>&1 || {
+  printf 'rede do staging ausente: %s; suba o staging antes da execução\n' \
+    "$required_network" >&2
   exit 1
 }
+
+# Redes declaradas exclusivamente por services de profile não são criadas no
+# deploy normal. `docker compose run` cria a rede declarada pelo serviço
+# profile antes de iniciar o container; não exija o egress previamente.
 
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

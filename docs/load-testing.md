@@ -15,6 +15,10 @@ iniciado pelo deploy normal e não pode ser apontado para produção.
 - redes do projeto `emporio-staging` criadas;
 - janela de carga autorizada pelo operador.
 
+As redes `apps` e `radar-net` devem existir como prova de que o staging está
+subido. A rede `loadtest-egress` pode ainda não existir: ela é criada pelo
+`docker compose run` quando o primeiro cenário público é executado.
+
 Não é necessário criar parquet sintético. O Radar deve usar os datasets
 existentes no R2 de staging. CNPJ/CEP públicos usados podem aparecer no resumo
 da execução, conforme autorização operacional; tokens, senhas, emails, cookies,
