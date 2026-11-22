@@ -151,6 +151,29 @@ produção). Logs seguem o caminho separado do `dokploy-vector` no host
   config` SUCCESS, sem placeholders residuais. A prova de ingestão no Grafana
   Cloud acontece no smoke pós-deploy.
 
+## Cache RFB e concorrência do Radar
+
+O Radar usa o volume persistente `emporio-staging_radar_state` também para o
+cache RFB em `/var/lib/radar-middleware/state/rfb`. O cache é reconstruível a
+partir do R2 e sua ativação exige manifesto, tamanho, SHA-256, schema,
+cardinalidade e smoke-check. A troca de versão é atômica; o regime esperado é
+`current` mais uma versão anterior.
+
+Provisionar aproximadamente **18 GB livres** no volume de estado para acomodar
+o crescimento dos Parquets e a transição mensal. Não remover o volume com
+`down -v`, prune ou operação equivalente.
+
+O sync inicial ocorre em background e o `/health/ready` continua representando
+somente a projeção CEP. O estado RFB deve ser acompanhado por
+`radar_rfb_cache_ready` e `radar_rfb_cache_fallback_active`. Durante
+indisponibilidade ou admissão cheia, consultas RFB podem responder `503` com
+`Retry-After`.
+
+Os valores de sync e admissão são configurados no Environment do serviço
+Compose e encaminhados somente ao `radar`; são valores operacionais não
+secretos. A janela `21:00 America/Sao_Paulo` depende da confirmação do horário
+de publicação mensal dos Parquets pelo Radar CLI.
+
 ## Redes e exposição
 
 - `apps` é interna: Front ↔ API. O `cloudflared` alcança os serviços por

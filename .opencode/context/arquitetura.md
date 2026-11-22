@@ -179,7 +179,13 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
   `tunnel-egress` e `prometheus-egress` são bridges separadas, cada uma ligada
   apenas ao serviço que precisa sair. Nenhum serviço publica porta. Volumes
   `emporio-staging_pgdata` (persistente), `emporio-staging_radar_state` e
-  `emporio-staging_prometheus-data` são named volumes. Teto aprovado por stack:
+  `emporio-staging_prometheus-data` são named volumes. O artefato define o
+  cache RFB do Radar no subpath
+  `/var/lib/radar-middleware/state/rfb` dentro de `radar_state`; as envs de
+  sync, concorrência e limites DuckDB já existem no artefato staging, mas
+  runtime/cache/sync/imagem Radar ainda não foram verificados
+  (`compose/docker-compose.staging.yml:200-242`,
+  `env/.env.staging.example:83-96`). Teto aprovado por stack:
   2 CPU/12 GiB (decisão do operador de 2026-11-13: divisão meio a meio da VPS
   entre staging e produção futura; substitui o teto inicial de 1,5 CPU/3 GiB).
   Limites long-lived no Compose somam 1,75 CPU/3.375 GiB (incluindo o

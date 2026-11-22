@@ -723,7 +723,8 @@ Fotografia factual vigente. Não é cronologia de tasks.
       ingestão/configuração Cloud. API expõe heap
     JVM agregada (não RSS/container) e CPU do processo JVM; Radar expõe CPU,
     RSS e memória virtual do processo. Métricas cgroup/container não estão
-    disponíveis e cAdvisor está fora do escopo. Backend Java não tem buckets
+    disponíveis. Dashboard/cAdvisor para métricas de host/container está
+    planejado e delegado à TASK-INFRA-029. Backend Java não tem buckets
     de duração, portanto seus painéis usam média/máximo, não percentis; somente
     os histogramas do Radar permitem p50/p95. O escopo exclui Front, Postgres,
     cloudflared e host. RED e métricas de domínio podem depender de tráfego;
@@ -764,6 +765,16 @@ Fotografia factual vigente. Não é cronologia de tasks.
   pelo provisionamento de valores
   reais (R2 Back/Radar + objetos parquet do Radar, SMTP, senhas Postgres, JWT,
   token do túnel), pelo primeiro login Access e pelo deploy/smoke em si.
+  **Existente — configuração RFB no staging:** o Compose, o env example e a
+  documentação de operação definem o cache RFB no volume
+  `emporio-staging_radar_state`, em
+  `/var/lib/radar-middleware/state/rfb`, com sync/admissão e limites DuckDB
+  encaminhados ao serviço Radar. A validação local de `docker compose config
+  --quiet` passou; runtime do Radar, cache, sync e imagem Radar ainda não
+  foram verificados (`compose/docker-compose.staging.yml:200-242`,
+  `env/.env.staging.example:83-96`, `docs/staging-compose.md:154-175`).
+  O headroom operacional reportado agora é de **18 GB livres** para o volume
+  de estado; isso é capacidade reportada, não uma medição independente.
   **Existente — borda de staging (2026-11-13):** zona Active na Cloudflare,
    túnel `emporio-staging` criado no dashboard; connector healthy na VPS foi
    reportado pelo operador em TASK-INFRA-026, sem validação independente. Rotas

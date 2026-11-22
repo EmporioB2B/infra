@@ -406,6 +406,17 @@ estão aposentados.
   listener fica somente na `radar-metrics-net` interna (`10.254.31.0/24`,
   Prometheus em `10.254.31.20`), sem publicação no host
   (`compose/docker-compose.staging.yml:206-207,213-214,374-381`).
+- **Existente — staging, configuração RFB no artefato:** o serviço `radar`
+  recebe `RFB_CACHE_PATH`, `RFB_CACHE_SYNC_HOUR`, `RFB_CACHE_SYNC_TZ`,
+  `RFB_DUCKDB_MEMORY_LIMIT`, `RFB_DUCKDB_THREADS`, `RFB_LOOKUP_ACTIVE_LIMIT`,
+  `RFB_LOOKUP_QUEUE_LIMIT`, `RFB_LOOKUP_RETRY_AFTER`,
+  `RFB_LOOKUP_ACQUISITION_TIMEOUT`, `RFB_SYNC_MAX_ATTEMPTS`,
+  `RFB_SYNC_BACKOFF_SECONDS` e `RFB_SHUTDOWN_TIMEOUT`; o cache fica em
+  `/var/lib/radar-middleware/state/rfb`, no volume `radar_state`, com defaults
+  operacionais registrados no example. A renderização local do Compose passou;
+  runtime do Radar, cache, sync e imagem Radar ainda não foram verificados
+  (`compose/docker-compose.staging.yml:200-242`,
+  `env/.env.staging.example:83-96`).
 - Envs reais (Pydantic settings, `env_prefix=""`, case-sensitive):
   `ENVIRONMENT`, `LOG_LEVEL`, `PORT`,
   `METRICS_BIND_ADDRESS`, `METRICS_PORT`,
@@ -418,7 +429,12 @@ estão aposentados.
   `SQLITE_PATH`, `SQLITE_BUSY_TIMEOUT_MS`, `SQLITE_WRITE_RETRY_ATTEMPTS`,
   `SQLITE_WRITE_DEADLINE_SECONDS`, `SQLITE_WRITE_BACKOFF_SECONDS`,
   `SQLITE_WRITE_JITTER_SECONDS`,
-  `VIACEP_BASE_URL`, `VIACEP_TIMEOUT`, `VIACEP_MAX_RESPONSE_BYTES`.
+  `VIACEP_BASE_URL`, `VIACEP_TIMEOUT`, `VIACEP_MAX_RESPONSE_BYTES`,
+  `RFB_CACHE_PATH`, `RFB_CACHE_SYNC_HOUR`, `RFB_CACHE_SYNC_TZ`,
+  `RFB_DUCKDB_MEMORY_LIMIT`, `RFB_DUCKDB_THREADS`, `RFB_LOOKUP_ACTIVE_LIMIT`,
+  `RFB_LOOKUP_QUEUE_LIMIT`, `RFB_LOOKUP_RETRY_AFTER`,
+  `RFB_LOOKUP_ACQUISITION_TIMEOUT`, `RFB_SYNC_MAX_ATTEMPTS`,
+  `RFB_SYNC_BACKOFF_SECONDS`, `RFB_SHUTDOWN_TIMEOUT`.
 - Restrições duras do `config.py` (validação sem rede):
   - `CLOUDFLARE_URL_ACCESS` **somente** `https://<account>.r2.cloudflarestorage.com`
     (sem porta, sem path) — S3 local (RustFS/MinIO) é rejeitado; dev usa o
@@ -453,6 +469,8 @@ estão aposentados.
   em `docs/cicd.md:67-74`; a referência `RADAR_IMAGE` do staging precisa
   refletir a tag realmente publicada
   (`Radar_Middleware_Python/.github/workflows/ci.yml:18-59,77-85`).
+- **Planejado — visualização de host/container:** dashboard/cAdvisor não fazem
+  parte dos artefatos atuais e permanecem delegados à TASK-INFRA-029.
 - **Pendência de visualização:** o Radar ainda não entrega catálogo de
   coordenadas para `codigo_cidade`. Existe um mapa de referência de municípios
   com códigos e nomes RFB/IBGE, mas ele não contém latitude/longitude; o Grafana
