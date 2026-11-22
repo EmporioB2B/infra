@@ -225,8 +225,10 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
      (não verificado independentemente):** a matriz passou os checks e as
      rejeições esperadas; relatórios anteriores não têm essa seção e uma nova
      execução é necessária para persistir os campos.
-     `LOADTEST_CNPJS`/`K6_CNPJS` é opcional, `all-miss` usa somente CNPJ e
-     recusa exaustão de fixtures, `--vus`/`--duration` selecionam
+      `LOADTEST_CNPJS`/`K6_CNPJS` é opcional, `--fixture-mode=all-miss` é
+      aceito pelo controlador somente para `radar-cnpj`, usa somente CNPJ e
+      recusa exaustão de fixtures; sem a opção, `common.js` aplica `default`.
+      `--vus`/`--duration` selecionam
      `constant-vus` com pacing de 1s por VU, e
      `scripts/load-matrix.sh` percorre 1/2/4/8/12 VUs por padrão, reservando
      faixas distintas de CNPJ por degrau. A matriz

@@ -628,8 +628,10 @@ O Radar **existente — dev** não é emulado: usa o R2 de teste real (restriç�
    e uma nova execução será necessária para persistir os campos. A mecânica de
    fixtures permanece: os
   cenários aceitam `LOADTEST_CNPJS`/`K6_CNPJS` como lista opcional de fixtures
-   CNPJ distintas; `fixture-mode=all-miss` força somente CNPJ e recusa a
-   exaustão da lista. O controlador aceita `--vus`, `--duration`,
+    CNPJ distintas; `--fixture-mode=all-miss` é aceito pelo controlador somente
+    no cenário `radar-cnpj`, força somente CNPJ e recusa a exaustão da lista.
+    Sem essa opção, o controlador repassa modo vazio e `common.js` aplica
+    `default`. O controlador aceita `--vus`, `--duration`,
    `--fixture-offset` e `--expect-capacity-rejection`, repassando o executor
    `constant-vus` e a duração ao k6; `radar-cnpj.js` faz pacing de 1s por VU.
    `scripts/load-matrix.sh` executa por padrão 1/2/4/8/12 VUs por 30 segundos

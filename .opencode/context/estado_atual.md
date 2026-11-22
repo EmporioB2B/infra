@@ -170,8 +170,9 @@ Fotografia factual vigente. Não é cronologia de tasks.
     rejeições esperadas. Relatórios anteriores não têm esses campos; uma nova
     execução da matriz é necessária para persistir essa seção nos relatórios.
     A extensão de fixtures permanece:
-    `LOADTEST_CNPJS`/`K6_CNPJS` opcional, modo `all-miss` com recusa de
-    exaustão, executor `constant-vus` com pacing de 1s por VU, flags
+    `LOADTEST_CNPJS`/`K6_CNPJS` opcional, `--fixture-mode=all-miss` somente
+    para `radar-cnpj`, com recusa de exaustão; sem a flag, `common.js` aplica
+    `default`; executor `constant-vus` com pacing de 1s por VU, flags
     `--vus`/`--duration`/`--fixture-offset`/`--expect-capacity-rejection` e
     `scripts/load-matrix.sh` com degraus padrão de 1/2/4/8/12 VUs e faixas
     distintas de CNPJ por degrau foram implementados. A matriz contabiliza separadamente `503` com
