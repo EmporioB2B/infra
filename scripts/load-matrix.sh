@@ -62,6 +62,19 @@ for vus in "${vu_values[@]}"; do
     --report "$report"
   status=$?
   set -e
+  if [[ "$status" -eq 0 && -f "$report" ]]; then
+    scrape_errors="$(python3 - "$report" <<'PY'
+import json
+import sys
+print(json.load(open(sys.argv[1])).get("radar_metrics", {}).get("scrape_errors", 0))
+PY
+)"
+    if [[ "$scrape_errors" != 0 ]]; then
+      printf 'falha: %s erros de scrape Radar no degrau %s VUs\n' \
+        "$scrape_errors" "$vus" >&2
+      status=2
+    fi
+  fi
   [[ "$status" -eq 0 ]] || overall_status=1
   statuses+=("{\"vus\":${vus},\"exit_status\":${status},\"report\":\"$(basename "$report")\"}")
   fixture_offset=$((fixture_offset + vus * duration))

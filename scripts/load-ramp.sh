@@ -243,13 +243,16 @@ for line in pathlib.Path(events_path).read_text().splitlines():
 
 radar_samples = []
 scrape_errors = 0
+scrape_error_codes = []
 current_sample = None
 for line in pathlib.Path(radar_metrics_path).read_text().splitlines():
     if line.startswith("# sample "):
         current_sample = {"timestamp": line.removeprefix("# sample "), "metrics": {}}
         radar_samples.append(current_sample)
-    elif line == "# scrape_error":
+    elif line.startswith("# scrape_error"):
         scrape_errors += 1
+        if "curl_exit=" in line:
+            scrape_error_codes.append(line.split("curl_exit=", 1)[1])
     elif current_sample is not None and line and not line.startswith("# "):
         metric, _, value = line.partition(" ")
         if metric and value:
@@ -271,7 +274,12 @@ result = {
     "exit_status": int(status),
     "request_count": requests.get("count", 0),
     "throughput": requests.get("rate", 0),
-    "expected_response_count": expected_requests.get("count", 0),
+    "expected_response_count": expected_requests.get(
+        "count",
+        requests.get("count", 0)
+        - metric_count("radar_expected_capacity_503")
+        - metric_count("radar_unexpected_status"),
+    ),
     "latency_ms": {
         "p50": duration.get("med"),
         "p95": duration.get("p(95)"),
@@ -294,6 +302,7 @@ result = {
     "radar_metrics": {
         "sample_count": len(radar_samples),
         "scrape_errors": scrape_errors,
+        "scrape_error_codes": scrape_error_codes,
         "last_values": last_radar_metrics,
     },
     "container_stats_samples": containers,

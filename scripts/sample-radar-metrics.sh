@@ -33,9 +33,15 @@ start="$(date +%s)"
     now="$(date +%s)"
     (( now - start >= duration )) && break
     printf '# sample %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    if ! curl --fail --silent --show-error --max-time 5 "$url" |
-      awk '/^(radar_rfb_|# (HELP|TYPE) radar_rfb_)/ { print }'; then
-      printf '# scrape_error\n'
+    set +e
+    metrics="$(curl --fail --silent --show-error --max-time 5 "$url" 2>/dev/null)"
+    curl_status=$?
+    set -e
+    if [[ "$curl_status" -eq 0 ]]; then
+      printf '%s\n' "$metrics" |
+        awk '/^(radar_rfb_|# (HELP|TYPE) radar_rfb_)/ { print }'
+    else
+      printf '# scrape_error curl_exit=%s\n' "$curl_status"
     fi
     sleep "$interval"
   done
