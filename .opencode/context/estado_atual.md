@@ -153,18 +153,21 @@ Fotografia factual vigente. Não é cronologia de tasks.
    (`scripts/load-ramp.sh:28-42,115-124`; `compose/docker-compose.staging.yml:3-9,13-18`;
    `env/.env.staging.example:1-4,107-116`; `docs/load-testing.md:46-52`).
    **Existente — extensão do harness no artefato; execução não verificada:**
-   `LOADTEST_CNPJS`/`K6_CNPJS` opcional, modo `all-miss`, executor
-   `constant-vus`, flags `--vus`/`--duration`/`--expect-capacity-rejection` e
-   `scripts/load-matrix.sh` com degraus padrão de 1/2/4/8/12 VUs foram
-   implementados. A matriz contabiliza separadamente `503` com
+    `LOADTEST_CNPJS`/`K6_CNPJS` opcional, modo `all-miss` com recusa de
+    exaustão, executor `constant-vus` com pacing de 1s por VU, flags
+    `--vus`/`--duration`/`--fixture-offset`/`--expect-capacity-rejection` e
+    `scripts/load-matrix.sh` com degraus padrão de 1/2/4/8/12 VUs e faixas
+    distintas de CNPJ por degrau foram implementados. A matriz contabiliza separadamente `503` com
    `Retry-After` como rejeição de capacidade esperada; `503` sem header,
    `500` e timeouts são falhas. **Existente — dev:** o Compose/dev não foi
    atualizado. **Pendência:** o runtime da nova mecânica de admissão do Radar
    ainda não foi verificado
-   (`loadtests/common.js:82-145`; `loadtests/radar-cnpj.js:13-57`;
-   `scripts/load-ramp.sh:19-59,124-158,248-251`;
-   `scripts/load-matrix.sh:6-70`). A matriz grava o status de cada degrau
-   no manifesto e retorna status não-zero quando qualquer degrau falha;
+    (`loadtests/common.js:118-149`; `loadtests/radar-cnpj.js:31-60`;
+    `scripts/load-ramp.sh:19-59,138-158`;
+    `scripts/load-matrix.sh:43-68`). A matriz grava o status de cada degrau
+    no manifesto e retorna status não-zero quando qualquer degrau falha. A
+    matriz anterior é inválida por loop de 80–100 req/s; nova execução depende
+    de checkout e imagem `infra-loadtest` atualizados;
    `compose/docker-compose.staging.yml:3-9`;
    `env/.env.staging.example:128-133`).
    **Relato do operador (TASK-INFRA-026; não verificado independentemente nesta

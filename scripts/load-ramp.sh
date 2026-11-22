@@ -17,12 +17,13 @@ EOF
 
 confirmation=''
 scenario=''
-    plan='calibration'
+plan='calibration'
 env_file=''
 vus=''
 duration_arg=''
 fixture_mode_arg='default'
 expect_capacity_rejection='false'
+fixture_offset=''
 report=''
 while (($#)); do
   case "$1" in
@@ -34,6 +35,7 @@ while (($#)); do
     --duration) duration_arg="${2:?valor ausente para --duration}"; shift 2 ;;
     --fixture-mode) fixture_mode_arg="${2:?valor ausente para --fixture-mode}"; shift 2 ;;
     --expect-capacity-rejection) expect_capacity_rejection='true'; shift ;;
+    --fixture-offset) fixture_offset="${2:?valor ausente para --fixture-offset}"; shift 2 ;;
     --report) report="${2:?valor ausente para --report}"; shift 2 ;;
     *) usage ;;
   esac
@@ -45,6 +47,7 @@ done
 [[ -z "${vus:-}" || "$vus" =~ ^[1-9][0-9]*$ ]] || usage
 [[ -z "${duration_arg:-}" || "$duration_arg" =~ ^[1-9][0-9]*$ ]] || usage
 [[ -z "${fixture_mode_arg:-}" || "$fixture_mode_arg" =~ ^(default|all-miss)$ ]] || usage
+[[ -z "${fixture_offset:-}" || "$fixture_offset" =~ ^[0-9]+$ ]] || usage
 [[ "${scenario}" == radar-cnpj || -z "${fixture_mode_arg:-}" ]] || {
   printf '%s\n' '--fixture-mode só é válido para radar-cnpj' >&2
   exit 1
@@ -141,12 +144,14 @@ run_env=(
   -e "K6_PLAN=$plan"
   -e "K6_FIXTURE_MODE=$fixture_mode_arg"
   -e "K6_EXPECT_CAPACITY_REJECTION=$expect_capacity_rejection"
+  -e "K6_FIXTURE_OFFSET=${fixture_offset:-0}"
 )
 if [[ -n "$vus" ]]; then
   run_env+=(
     -e 'K6_EXECUTOR=constant-vus'
     -e "K6_VUS=$vus"
     -e "K6_DURATION=${duration}s"
+    -e "K6_DURATION_SECONDS=$duration"
   )
 fi
 docker compose "${compose_args[@]}" --profile loadtest run \

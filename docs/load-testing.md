@@ -106,6 +106,10 @@ Cada degrau dura 30 segundos. O Radar pode responder `503` com
 capacidade esperadas. Respostas `500`, timeouts ou `503` sem `Retry-After`
 continuam sendo falhas.
 
+No modo de VUs fixos, cada VU aguarda aproximadamente 1 segundo entre
+requisições. Cada degrau recebe uma faixa distinta de CNPJs para evitar
+reutilização de fixtures e aquecimento artificial do cache.
+
 Os relatórios individuais e o manifesto ficam em
 `relatorios/carga/matrix-<id>/`.
 

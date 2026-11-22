@@ -137,7 +137,16 @@ export function cnpjFixtures() {
 
 export function cnpjForIteration() {
   const values = cnpjFixtures();
-  return values[(__VU - 1 + __ITER) % values.length];
+  const offset = Number(__ENV.K6_FIXTURE_OFFSET || 0);
+  const durationSeconds = Number(__ENV.K6_DURATION_SECONDS || 0);
+  const vuOffset = __ENV.K6_EXECUTOR === 'constant-vus'
+    ? (__VU - 1) * durationSeconds
+    : 0;
+  const index = offset + vuOffset + __ITER;
+  if (fixtureMode() === 'all-miss' && index >= values.length) {
+    throw new Error('CNPJ fixture pool exhausted');
+  }
+  return values[index % values.length];
 }
 
 export function expectCapacityRejection() {

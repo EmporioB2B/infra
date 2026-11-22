@@ -603,21 +603,25 @@ O Radar **existente — dev** não é emulado: usa o R2 de teste real (restriç�
   `docs/load-testing.md:93-95`).
 - **Existente — mecânica nova do harness (runtime não verificado):** os
   cenários aceitam `LOADTEST_CNPJS`/`K6_CNPJS` como lista opcional de fixtures
-  CNPJ distintas; `fixture-mode=all-miss` força somente CNPJ. O controlador
-  aceita `--vus`, `--duration` e `--expect-capacity-rejection`, repassando o
-  executor `constant-vus` e a duração ao k6. `scripts/load-matrix.sh` executa
-  por padrão 1/2/4/8/12 VUs por 30 segundos. Quando a rejeição de capacidade é
+   CNPJ distintas; `fixture-mode=all-miss` força somente CNPJ e recusa a
+   exaustão da lista. O controlador aceita `--vus`, `--duration`,
+   `--fixture-offset` e `--expect-capacity-rejection`, repassando o executor
+   `constant-vus` e a duração ao k6; `radar-cnpj.js` faz pacing de 1s por VU.
+   `scripts/load-matrix.sh` executa por padrão 1/2/4/8/12 VUs por 30 segundos
+   e reserva faixas distintas de CNPJ por degrau. Quando a rejeição de capacidade é
   esperada, `503` com `Retry-After` é contabilizado separadamente; `503` sem
   esse header, `500` e timeouts permanecem falhas. O Compose staging injeta
   `K6_CNPJS` opcional e o example declara `LOADTEST_CNPJS` vazio
-   (`loadtests/common.js:82-145`; `loadtests/radar-cnpj.js:13-57`;
-   `scripts/load-ramp.sh:19-59,124-158,248-251`;
-   `scripts/load-matrix.sh:6-70`). A matriz grava o status de cada degrau
+   (`loadtests/common.js:118-149`; `loadtests/radar-cnpj.js:31-60`;
+   `scripts/load-ramp.sh:19-59,138-158`;
+   `scripts/load-matrix.sh:43-68`). A matriz grava o status de cada degrau
    no manifesto e retorna status não-zero quando qualquer degrau falha;
    `compose/docker-compose.staging.yml:3-9`;
   `env/.env.staging.example:128-133`;
   `docs/load-testing.md:84-111`). O Compose/dev não foi atualizado para essa
-  mecânica; o runtime da nova admissão do Radar ainda não foi verificado.
+   mecânica; o runtime da nova admissão do Radar ainda não foi verificado. A
+   matriz anterior é inválida por loop de 80–100 req/s; nova execução depende
+   de checkout e imagem `infra-loadtest` atualizados.
 
 ## Observabilidade de logs
 

@@ -209,15 +209,20 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
    `scripts/load-ramp.sh:28-42,84-124`;
    `.github/workflows/publish-loadtest.yml:22-81`).
     **Existente — extensão da matriz RFB no artefato, runtime não verificado:**
-    `LOADTEST_CNPJS`/`K6_CNPJS` é opcional, `all-miss` usa somente CNPJ,
-    `--vus`/`--duration` selecionam `constant-vus` e
-    `scripts/load-matrix.sh` percorre 1/2/4/8/12 VUs por padrão. A matriz
+     `LOADTEST_CNPJS`/`K6_CNPJS` é opcional, `all-miss` usa somente CNPJ e
+     recusa exaustão de fixtures, `--vus`/`--duration` selecionam
+     `constant-vus` com pacing de 1s por VU, e
+     `scripts/load-matrix.sh` percorre 1/2/4/8/12 VUs por padrão, reservando
+     faixas distintas de CNPJ por degrau. A matriz
     distingue `503` com `Retry-After` como rejeição de capacidade esperada de
     `503` sem header, `500` e timeouts como falhas
-     (`loadtests/common.js:82-145`; `loadtests/radar-cnpj.js:13-57`;
-     `scripts/load-ramp.sh:19-59,124-158,248-251`;
-     `scripts/load-matrix.sh:6-70`). A matriz grava o status de cada degrau
-     no manifesto e retorna status não-zero quando qualquer degrau falha.
+      (`loadtests/common.js:118-149`; `loadtests/radar-cnpj.js:31-60`;
+      `scripts/load-ramp.sh:19-59,138-158`;
+      `scripts/load-matrix.sh:43-68`). A matriz grava o status de cada degrau
+      no manifesto e retorna status não-zero quando qualquer degrau falha.
+      A matriz anterior não é evidência válida: o loop de 80–100 req/s não
+      correspondia ao pacing atual. Nova execução depende de checkout e imagem
+      `infra-loadtest` atualizados.
      **Existente — dev:** o Compose de
     desenvolvimento não foi atualizado para essa mecânica; a verificação
     runtime da nova admissão do Radar permanece pendente.

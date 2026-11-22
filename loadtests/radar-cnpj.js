@@ -1,5 +1,5 @@
 import http from 'k6/http';
-import { check } from 'k6';
+import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
 import {
   cnpjForIteration,
@@ -55,4 +55,7 @@ export default function () {
         && Boolean(res.headers['Retry-After'])
       ),
   });
+  if (__ENV.K6_EXECUTOR === 'constant-vus') {
+    sleep(1);
+  }
 }

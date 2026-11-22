@@ -40,6 +40,7 @@ mkdir -p "$report_dir"
 manifest="$report_dir/matrix.json"
 statuses=()
 overall_status=0
+fixture_offset=0
 
 for vus in "${vu_values[@]}"; do
   [[ "$vus" =~ ^[1-9][0-9]*$ ]] || {
@@ -57,11 +58,13 @@ for vus in "${vu_values[@]}"; do
     --duration "$duration" \
     --fixture-mode all-miss \
     --expect-capacity-rejection \
+    --fixture-offset "$fixture_offset" \
     --report "$report"
   status=$?
   set -e
   [[ "$status" -eq 0 ]] || overall_status=1
   statuses+=("{\"vus\":${vus},\"exit_status\":${status},\"report\":\"$(basename "$report")\"}")
+  fixture_offset=$((fixture_offset + vus * duration))
 done
 
 printf '{\n  "matrix_id": "%s",\n  "duration_seconds": %s,\n  "steps": [%s]\n}\n' \
