@@ -586,7 +586,7 @@ O Radar **existente — dev** não é emulado: usa o R2 de teste real (restriç�
   `GET /internal/v1/empresas/{cnpj}/estabelecimento`
   (`../Radar_Middleware_Python/src/radar_middleware/api/routers/cep.py:35-40`;
   `../Radar_Middleware_Python/src/radar_middleware/api/routers/empresas.py:121-139`).
-- `scripts/load-ramp.sh` aceita apenas confirmação literal `staging`, recusa
+ - `scripts/load-ramp.sh` aceita apenas confirmação literal `staging`, recusa
   host de produção nos módulos k6, aceita `--env-file` para que a execução via
   sudo não dependa do ambiente herdado e repassa o arquivo ao Compose. Esse
   arquivo protegido deve conter todas as variáveis de interpolação exigidas
@@ -601,6 +601,23 @@ O Radar **existente — dev** não é emulado: usa o R2 de teste real (restriç�
   `login-rate-limit` usa senha inválida e espera `429` com `Retry-After`;
   exige janela de carga separada (`loadtests/login-rate-limit.js:23-39`;
   `docs/load-testing.md:93-95`).
+- **Existente — mecânica nova do harness (runtime não verificado):** os
+  cenários aceitam `LOADTEST_CNPJS`/`K6_CNPJS` como lista opcional de fixtures
+  CNPJ distintas; `fixture-mode=all-miss` força somente CNPJ. O controlador
+  aceita `--vus`, `--duration` e `--expect-capacity-rejection`, repassando o
+  executor `constant-vus` e a duração ao k6. `scripts/load-matrix.sh` executa
+  por padrão 1/2/4/8/12 VUs por 30 segundos. Quando a rejeição de capacidade é
+  esperada, `503` com `Retry-After` é contabilizado separadamente; `503` sem
+  esse header, `500` e timeouts permanecem falhas. O Compose staging injeta
+  `K6_CNPJS` opcional e o example declara `LOADTEST_CNPJS` vazio
+   (`loadtests/common.js:82-145`; `loadtests/radar-cnpj.js:13-57`;
+   `scripts/load-ramp.sh:19-59,124-158,248-251`;
+   `scripts/load-matrix.sh:6-70`). A matriz grava o status de cada degrau
+   no manifesto e retorna status não-zero quando qualquer degrau falha;
+   `compose/docker-compose.staging.yml:3-9`;
+  `env/.env.staging.example:128-133`;
+  `docs/load-testing.md:84-111`). O Compose/dev não foi atualizado para essa
+  mecânica; o runtime da nova admissão do Radar ainda não foi verificado.
 
 ## Observabilidade de logs
 

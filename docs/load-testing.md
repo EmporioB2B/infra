@@ -80,6 +80,35 @@ scripts/load-ramp.sh \
   --env-file /caminho/protegido/staging.env
 ```
 
+## Matriz de concorrência RFB
+
+Para medir a nova admissão do Radar, `LOADTEST_CNPJS` deve conter fixtures
+públicas distintas, separadas por vírgula, existentes no dataset de staging.
+O modo `all-miss` usa somente CNPJ e evita a alternância com CEP/cache quente.
+
+Execute:
+
+```bash
+scripts/load-matrix.sh \
+  --confirm-staging \
+  --env-file /caminho/protegido/staging.env
+```
+
+Por padrão, a matriz executa:
+
+```text
+1, 2, 4, 8 e 12 VUs
+```
+
+Cada degrau dura 30 segundos. O Radar pode responder `503` com
+`Retry-After: 1` quando `RFB_LOOKUP_ACTIVE_LIMIT=1` e
+`RFB_LOOKUP_QUEUE_LIMIT=0`; esses `503` são contabilizados como rejeições de
+capacidade esperadas. Respostas `500`, timeouts ou `503` sem `Retry-After`
+continuam sendo falhas.
+
+Os relatórios individuais e o manifesto ficam em
+`relatorios/carga/matrix-<id>/`.
+
 A rampa `full` usa `1 req/s` por 60s, `2 req/s` por 120s, `5 req/s` por 120s
 e `10 req/s` por 120s. A calibração usa `1 req/s` por 30s e `2 req/s` por
 30s. Os thresholds são conservadores e o resultado não constitui aprovação de

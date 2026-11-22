@@ -152,6 +152,21 @@ Fotografia factual vigente. Não é cronologia de tasks.
    verificados nesta sessão
    (`scripts/load-ramp.sh:28-42,115-124`; `compose/docker-compose.staging.yml:3-9,13-18`;
    `env/.env.staging.example:1-4,107-116`; `docs/load-testing.md:46-52`).
+   **Existente — extensão do harness no artefato; execução não verificada:**
+   `LOADTEST_CNPJS`/`K6_CNPJS` opcional, modo `all-miss`, executor
+   `constant-vus`, flags `--vus`/`--duration`/`--expect-capacity-rejection` e
+   `scripts/load-matrix.sh` com degraus padrão de 1/2/4/8/12 VUs foram
+   implementados. A matriz contabiliza separadamente `503` com
+   `Retry-After` como rejeição de capacidade esperada; `503` sem header,
+   `500` e timeouts são falhas. **Existente — dev:** o Compose/dev não foi
+   atualizado. **Pendência:** o runtime da nova mecânica de admissão do Radar
+   ainda não foi verificado
+   (`loadtests/common.js:82-145`; `loadtests/radar-cnpj.js:13-57`;
+   `scripts/load-ramp.sh:19-59,124-158,248-251`;
+   `scripts/load-matrix.sh:6-70`). A matriz grava o status de cada degrau
+   no manifesto e retorna status não-zero quando qualquer degrau falha;
+   `compose/docker-compose.staging.yml:3-9`;
+   `env/.env.staging.example:128-133`).
    **Relato do operador (TASK-INFRA-026; não verificado independentemente nesta
    auditoria):** todos os serviços staging estão healthy na VPS; no runtime,
    `tunnel-api` contém `cloudflared=10.254.32.10` e `api=10.254.32.20`, e

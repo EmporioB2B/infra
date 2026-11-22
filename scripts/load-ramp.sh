@@ -17,8 +17,12 @@ EOF
 
 confirmation=''
 scenario=''
-plan='calibration'
+    plan='calibration'
 env_file=''
+vus=''
+duration_arg=''
+fixture_mode_arg='default'
+expect_capacity_rejection='false'
 report=''
 while (($#)); do
   case "$1" in
@@ -26,6 +30,10 @@ while (($#)); do
     --scenario) scenario="${2:?valor ausente para --scenario}"; shift 2 ;;
     --plan) plan="${2:?valor ausente para --plan}"; shift 2 ;;
     --env-file) env_file="${2:?valor ausente para --env-file}"; shift 2 ;;
+    --vus) vus="${2:?valor ausente para --vus}"; shift 2 ;;
+    --duration) duration_arg="${2:?valor ausente para --duration}"; shift 2 ;;
+    --fixture-mode) fixture_mode_arg="${2:?valor ausente para --fixture-mode}"; shift 2 ;;
+    --expect-capacity-rejection) expect_capacity_rejection='true'; shift ;;
     --report) report="${2:?valor ausente para --report}"; shift 2 ;;
     *) usage ;;
   esac
@@ -34,6 +42,17 @@ done
 [[ "$confirmation" == staging ]] || { printf '%s\n' 'é obrigatória a confirmação --confirm-staging' >&2; exit 1; }
 [[ "$scenario" =~ ^(public|api-radar|radar-cnpj|login-rate-limit)$ ]] || usage
 [[ "$plan" =~ ^(calibration|full)$ ]] || usage
+[[ -z "${vus:-}" || "$vus" =~ ^[1-9][0-9]*$ ]] || usage
+[[ -z "${duration_arg:-}" || "$duration_arg" =~ ^[1-9][0-9]*$ ]] || usage
+[[ -z "${fixture_mode_arg:-}" || "$fixture_mode_arg" =~ ^(default|all-miss)$ ]] || usage
+[[ "${scenario}" == radar-cnpj || -z "${fixture_mode_arg:-}" ]] || {
+  printf '%s\n' '--fixture-mode só é válido para radar-cnpj' >&2
+  exit 1
+}
+[[ -z "${vus:-}" || -n "${duration_arg:-}" ]] || {
+  printf '%s\n' '--vus exige --duration em segundos' >&2
+  exit 1
+}
 command -v docker >/dev/null 2>&1 || { printf '%s\n' 'docker não encontrado' >&2; exit 1; }
 docker info >/dev/null 2>&1 || { printf '%s\n' 'daemon Docker inacessível' >&2; exit 1; }
 if [[ -n "$env_file" && ! -f "$env_file" ]]; then
@@ -105,6 +124,7 @@ trap cleanup EXIT
 
 duration=60
 [[ "$plan" == full && "$scenario" != login-rate-limit ]] && duration=420
+[[ -n "$duration_arg" ]] && duration="$duration_arg"
 "$ROOT_DIR/scripts/sample-container-stats.sh" --duration "$duration" --output "$raw_stats" &
 stats_pid=$!
 docker events \
@@ -115,12 +135,24 @@ events_pid=$!
 set +e
 compose_args=(-f "$COMPOSE_FILE")
 [[ -z "$env_file" ]] || compose_args=(--env-file "$env_file" "${compose_args[@]}")
+run_env=(
+  -e "K6_BASE_URL=$base_url"
+  -e "K6_MODE=$mode"
+  -e "K6_PLAN=$plan"
+  -e "K6_FIXTURE_MODE=$fixture_mode_arg"
+  -e "K6_EXPECT_CAPACITY_REJECTION=$expect_capacity_rejection"
+)
+if [[ -n "$vus" ]]; then
+  run_env+=(
+    -e 'K6_EXECUTOR=constant-vus'
+    -e "K6_VUS=$vus"
+    -e "K6_DURATION=${duration}s"
+  )
+fi
 docker compose "${compose_args[@]}" --profile loadtest run \
   --name "$container_name" \
   --no-deps \
-  -e "K6_BASE_URL=$base_url" \
-  -e "K6_MODE=$mode" \
-  -e "K6_PLAN=$plan" \
+  "${run_env[@]}" \
   "$service" run --summary-export=/tmp/k6-summary.json "$script"
 status=$?
 set -e
@@ -162,6 +194,9 @@ metrics = summary.get("metrics", {})
 duration = metrics.get("http_req_duration", {})
 requests = metrics.get("http_reqs", {})
 checks = metrics.get("checks", {})
+
+def metric_count(name):
+    return metrics.get(name, {}).get("count", 0)
 
 containers = {}
 for line in pathlib.Path(stats_path).read_text().splitlines()[1:]:
@@ -213,6 +248,9 @@ result = {
         "passes": checks.get("passes", 0),
         "fails": checks.get("fails", 0),
     },
+    "capacity_rejections_503": metric_count("radar_expected_capacity_503"),
+    "unexpected_statuses": metric_count("radar_unexpected_status"),
+    "retry_after_missing": metric_count("radar_retry_after_missing"),
     "images": images,
     "container_events": events,
     "container_stats_samples": containers,

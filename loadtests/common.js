@@ -79,11 +79,69 @@ export function planStages() {
   ];
 }
 
+export function loadScenario(name) {
+  if (__ENV.K6_EXECUTOR === 'constant-vus') {
+    const vus = Number(env('K6_VUS'));
+    if (!Number.isInteger(vus) || vus < 1) {
+      throw new Error('K6_VUS must be a positive integer');
+    }
+    return {
+      executor: 'constant-vus',
+      vus,
+      duration: env('K6_DURATION'),
+      gracefulStop: '5s',
+      tags: { load_scenario: name },
+    };
+  }
+  return {
+    executor: 'ramping-arrival-rate',
+    startRate: 0,
+    timeUnit: '1s',
+    preAllocatedVUs: 10,
+    maxVUs: 50,
+    stages: planStages(),
+    tags: { load_scenario: name },
+  };
+}
+
 export function bearerOptions(token, endpoint) {
   return {
     headers: headers({ Authorization: `Bearer ${token}` }),
     tags: { endpoint },
   };
+}
+
+export function fixtureMode() {
+  return __ENV.K6_FIXTURE_MODE || 'default';
+}
+
+export function cnpjFixtures() {
+  const raw = __ENV.K6_CNPJS || '';
+  if (!raw) {
+    if (fixtureMode() === 'all-miss') {
+      throw new Error('missing runtime setting: K6_CNPJS');
+    }
+    return [fixture('K6_CNPJ')];
+  }
+  const values = raw.split(',').map((value) => value.trim()).filter(Boolean);
+  if (values.length === 0 || new Set(values).size !== values.length) {
+    throw new Error('K6_CNPJS must contain unique fixtures');
+  }
+  values.forEach((value) => {
+    if (!/^\d{14}$/.test(value)) {
+      throw new Error('CNPJ fixture must contain fourteen digits');
+    }
+  });
+  return values;
+}
+
+export function cnpjForIteration() {
+  const values = cnpjFixtures();
+  return values[(__VU - 1 + __ITER) % values.length];
+}
+
+export function expectCapacityRejection() {
+  return __ENV.K6_EXPECT_CAPACITY_REJECTION === 'true';
 }
 
 export function fixture(name) {

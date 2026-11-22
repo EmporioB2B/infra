@@ -208,6 +208,19 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
    (`compose/docker-compose.staging.yml:372-481`;
    `scripts/load-ramp.sh:28-42,84-124`;
    `.github/workflows/publish-loadtest.yml:22-81`).
+    **Existente — extensão da matriz RFB no artefato, runtime não verificado:**
+    `LOADTEST_CNPJS`/`K6_CNPJS` é opcional, `all-miss` usa somente CNPJ,
+    `--vus`/`--duration` selecionam `constant-vus` e
+    `scripts/load-matrix.sh` percorre 1/2/4/8/12 VUs por padrão. A matriz
+    distingue `503` com `Retry-After` como rejeição de capacidade esperada de
+    `503` sem header, `500` e timeouts como falhas
+     (`loadtests/common.js:82-145`; `loadtests/radar-cnpj.js:13-57`;
+     `scripts/load-ramp.sh:19-59,124-158,248-251`;
+     `scripts/load-matrix.sh:6-70`). A matriz grava o status de cada degrau
+     no manifesto e retorna status não-zero quando qualquer degrau falha.
+     **Existente — dev:** o Compose de
+    desenvolvimento não foi atualizado para essa mecânica; a verificação
+    runtime da nova admissão do Radar permanece pendente.
    Todos os gates de imagem estão verificados (2026-11-13: imagens app ARM64
    multiarch via `imagetools inspect` + perfil staging do Front via `grep` na
    imagem; referências e evidência em `estado_atual.md`). **Existente — wiring

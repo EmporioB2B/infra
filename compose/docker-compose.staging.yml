@@ -5,6 +5,7 @@ x-loadtest-environment: &loadtest-environment
   K6_LOGIN_PASSWORD: ${LOADTEST_LOGIN_PASSWORD:?senha do usuário de teste do loadtest obrigatória}
   K6_ORIGIN: ${LOADTEST_ORIGIN:-https://staging.emporiob2b.com.br}
   K6_CNPJ: ${LOADTEST_CNPJ:?CNPJ público de fixture do loadtest obrigatório}
+  K6_CNPJS: ${LOADTEST_CNPJS:-}
   K6_CEP: ${LOADTEST_CEP:?CEP público de fixture do loadtest obrigatório}
   K6_NO_USAGE_REPORT: "true"
 

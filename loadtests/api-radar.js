@@ -1,18 +1,11 @@
 import http from 'k6/http';
 import { check } from 'k6';
-import { bearerOptions, fixture, login, planStages } from './common.js';
+import { bearerOptions, cnpjForIteration, login, loadScenario } from './common.js';
 
 export const options = {
   summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
   scenarios: {
-    api_radar: {
-      executor: 'ramping-arrival-rate',
-      startRate: 0,
-      timeUnit: '1s',
-      preAllocatedVUs: 10,
-      maxVUs: 50,
-      stages: planStages(),
-    },
+    api_radar: loadScenario('api_radar'),
   },
   thresholds: {
     http_req_failed: ['rate<0.05'],
@@ -28,7 +21,7 @@ export function setup() {
 export default function (data) {
   const response = http.post(
     `${__ENV.K6_BASE_URL.replace(/\/+$/, '')}/api/v1/administracao/organizacoes/consultar-cnpj`,
-    JSON.stringify({ cnpj: fixture('K6_CNPJ') }),
+    JSON.stringify({ cnpj: cnpjForIteration() }),
     bearerOptions(data.accessToken, 'administracao_consultar_cnpj'),
   );
   check(response, {

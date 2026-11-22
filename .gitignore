@@ -57,3 +57,4 @@ relatorios/carga/*.raw
 relatorios/carga/*.tsv
 relatorios/carga/brutos/
 relatorios/carga/*-k6-summary.json
+relatorios/carga/matrix-*/raw/
