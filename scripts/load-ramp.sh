@@ -112,14 +112,17 @@ mkdir -p "$work_dir"
 raw_summary="$work_dir/k6-summary.json"
 raw_stats="$work_dir/container-stats.tsv"
 raw_events="$work_dir/container-events.tsv"
+raw_radar_metrics="$work_dir/radar-metrics.txt"
 container_name="emporio-loadtest-$run_id"
 stats_pid=''
 events_pid=''
+radar_metrics_pid=''
 # Invoked indirectly by EXIT trap.
 # shellcheck disable=SC2329
 cleanup() {
   [[ -z "$stats_pid" ]] || kill "$stats_pid" >/dev/null 2>&1 || true
   [[ -z "$events_pid" ]] || kill "$events_pid" >/dev/null 2>&1 || true
+  [[ -z "$radar_metrics_pid" ]] || kill "$radar_metrics_pid" >/dev/null 2>&1 || true
   docker rm "$container_name" >/dev/null 2>&1 || true
   rm -rf "$work_dir"
 }
@@ -130,6 +133,8 @@ duration=60
 [[ -n "$duration_arg" ]] && duration="$duration_arg"
 "$ROOT_DIR/scripts/sample-container-stats.sh" --duration "$duration" --output "$raw_stats" &
 stats_pid=$!
+"$ROOT_DIR/scripts/sample-radar-metrics.sh" --duration "$duration" --output "$raw_radar_metrics" &
+radar_metrics_pid=$!
 docker events \
   --filter 'label=com.docker.compose.project=emporio-staging' \
   --format '{{.Time}}\t{{.Action}}\t{{.Actor.Attributes.name}}' >"$raw_events" &
@@ -166,6 +171,7 @@ docker cp "$container_name:/tmp/k6-summary.json" "$raw_summary" >/dev/null 2>&1 
 kill "$events_pid" >/dev/null 2>&1 || true
 wait "$events_pid" || true
 wait "$stats_pid" || true
+wait "$radar_metrics_pid" || true
 [[ -s "$raw_summary" ]] || { printf '%s\n' 'k6 não produziu resumo sanitizado' >&2; exit "$status"; }
 image_inventory="$work_dir/images.tsv"
 : >"$image_inventory"
@@ -188,16 +194,18 @@ fi
 mkdir -p "$(dirname "$report")"
 finished_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 infra_sha="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || printf 'uncommitted')"
-python3 - "$raw_summary" "$raw_stats" "$raw_events" "$image_inventory" "$report" "$run_id" "$scenario" "$plan" "$mode" "$status" "$started_at" "$finished_at" "$infra_sha" <<'PY'
+python3 - "$raw_summary" "$raw_stats" "$raw_events" "$raw_radar_metrics" "$image_inventory" "$report" "$run_id" "$scenario" "$plan" "$mode" "$status" "$started_at" "$finished_at" "$infra_sha" <<'PY'
 import json
 import pathlib
 import sys
 
-summary_path, stats_path, events_path, images_path, report_path, run_id, scenario, plan, mode, status, started_at, finished_at, infra_sha = sys.argv[1:]
+summary_path, stats_path, events_path, radar_metrics_path, images_path, report_path, run_id, scenario, plan, mode, status, started_at, finished_at, infra_sha = sys.argv[1:]
 summary = json.loads(pathlib.Path(summary_path).read_text())
 metrics = summary.get("metrics", {})
 duration = metrics.get("http_req_duration", {})
+expected_duration = metrics.get("http_req_duration{expected_response:true}", {})
 requests = metrics.get("http_reqs", {})
+expected_requests = metrics.get("http_reqs{expected_response:true}", {})
 checks = metrics.get("checks", {})
 
 def metric_count(name):
@@ -233,6 +241,25 @@ for line in pathlib.Path(events_path).read_text().splitlines():
             "container": fields[2],
         })
 
+radar_samples = []
+scrape_errors = 0
+current_sample = None
+for line in pathlib.Path(radar_metrics_path).read_text().splitlines():
+    if line.startswith("# sample "):
+        current_sample = {"timestamp": line.removeprefix("# sample "), "metrics": {}}
+        radar_samples.append(current_sample)
+    elif line == "# scrape_error":
+        scrape_errors += 1
+    elif current_sample is not None and line and not line.startswith("# "):
+        metric, _, value = line.partition(" ")
+        if metric and value:
+            try:
+                current_sample["metrics"][metric] = float(value)
+            except ValueError:
+                continue
+
+last_radar_metrics = radar_samples[-1]["metrics"] if radar_samples else {}
+
 result = {
     "execution_id": run_id,
     "infra_sha": infra_sha,
@@ -244,10 +271,16 @@ result = {
     "exit_status": int(status),
     "request_count": requests.get("count", 0),
     "throughput": requests.get("rate", 0),
+    "expected_response_count": expected_requests.get("count", 0),
     "latency_ms": {
         "p50": duration.get("med"),
         "p95": duration.get("p(95)"),
         "p99": duration.get("p(99)"),
+    },
+    "latency_ms_expected_response": {
+        "p50": expected_duration.get("med"),
+        "p95": expected_duration.get("p(95)"),
+        "p99": expected_duration.get("p(99)"),
     },
     "checks": {
         "passes": checks.get("passes", 0),
@@ -258,6 +291,11 @@ result = {
     "retry_after_missing": metric_count("radar_retry_after_missing"),
     "images": images,
     "container_events": events,
+    "radar_metrics": {
+        "sample_count": len(radar_samples),
+        "scrape_errors": scrape_errors,
+        "last_values": last_radar_metrics,
+    },
     "container_stats_samples": containers,
     "limitations": [
         "CPU e memória são amostras de docker stats no host, não métricas Prometheus.",

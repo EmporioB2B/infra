@@ -408,7 +408,8 @@ estão aposentados.
   (`compose/docker-compose.staging.yml:206-207,213-214,374-381`).
 - **Existente — staging, configuração RFB no artefato:** o serviço `radar`
   recebe `RFB_CACHE_PATH`, `RFB_CACHE_SYNC_HOUR`, `RFB_CACHE_SYNC_TZ`,
-  `RFB_DUCKDB_MEMORY_LIMIT`, `RFB_DUCKDB_THREADS`, `RFB_LOOKUP_ACTIVE_LIMIT`,
+  `RFB_DUCKDB_MEMORY_LIMIT`, `RFB_DUCKDB_MEMORY_BUDGET`, `RFB_DUCKDB_THREADS`,
+  `RFB_LOOKUP_ACTIVE_LIMIT`,
   `RFB_LOOKUP_QUEUE_LIMIT`, `RFB_LOOKUP_RETRY_AFTER`,
   `RFB_LOOKUP_ACQUISITION_TIMEOUT`, `RFB_SYNC_MAX_ATTEMPTS`,
   `RFB_SYNC_BACKOFF_SECONDS` e `RFB_SHUTDOWN_TIMEOUT`; o cache fica em
@@ -417,6 +418,14 @@ estão aposentados.
   runtime do Radar, cache, sync e imagem Radar ainda não foram verificados
   (`compose/docker-compose.staging.yml:200-242`,
   `env/.env.staging.example:83-96`).
+- **Existente — staging, benchmark MVP (confirmação adicional do operador,
+  2026-11-22):** os artefatos foram atualizados com
+  `RFB_LOOKUP_ACTIVE_LIMIT=2`, `RFB_LOOKUP_QUEUE_LIMIT=8`,
+  `RFB_LOOKUP_ACQUISITION_TIMEOUT=1.0` e
+  `RFB_DUCKDB_MEMORY_BUDGET=1GB`; o container Radar tem exceção temporária de
+  limite de 1 CPU/1536M, abaixo do teto histórico de 2 CPU por stack.
+  **Runtime do novo Radar ainda pendente**; portanto os valores são existentes
+  no artefato conforme confirmação do operador, não fato verificado em runtime.
 - Envs reais (Pydantic settings, `env_prefix=""`, case-sensitive):
   `ENVIRONMENT`, `LOG_LEVEL`, `PORT`,
   `METRICS_BIND_ADDRESS`, `METRICS_PORT`,
@@ -431,7 +440,8 @@ estão aposentados.
   `SQLITE_WRITE_JITTER_SECONDS`,
   `VIACEP_BASE_URL`, `VIACEP_TIMEOUT`, `VIACEP_MAX_RESPONSE_BYTES`,
   `RFB_CACHE_PATH`, `RFB_CACHE_SYNC_HOUR`, `RFB_CACHE_SYNC_TZ`,
-  `RFB_DUCKDB_MEMORY_LIMIT`, `RFB_DUCKDB_THREADS`, `RFB_LOOKUP_ACTIVE_LIMIT`,
+  `RFB_DUCKDB_MEMORY_LIMIT`, `RFB_DUCKDB_MEMORY_BUDGET`, `RFB_DUCKDB_THREADS`,
+  `RFB_LOOKUP_ACTIVE_LIMIT`,
   `RFB_LOOKUP_QUEUE_LIMIT`, `RFB_LOOKUP_RETRY_AFTER`,
   `RFB_LOOKUP_ACQUISITION_TIMEOUT`, `RFB_SYNC_MAX_ATTEMPTS`,
   `RFB_SYNC_BACKOFF_SECONDS`, `RFB_SHUTDOWN_TIMEOUT`.
@@ -601,7 +611,22 @@ O Radar **existente — dev** não é emulado: usa o R2 de teste real (restriç�
   `login-rate-limit` usa senha inválida e espera `429` com `Retry-After`;
   exige janela de carga separada (`loadtests/login-rate-limit.js:23-39`;
   `docs/load-testing.md:93-95`).
-- **Existente — mecânica nova do harness (runtime não verificado):** os
+ - **Existente — mecânica nova do harness:** durante a carga,
+    `scripts/load-ramp.sh` executa em paralelo
+    `scripts/sample-radar-metrics.sh`, que consulta por HTTP
+    `http://10.254.31.30:8082/metrics`, sem `docker exec` ou socket Docker. O
+    relatório sanitizado inclui `radar_metrics.sample_count`,
+    `radar_metrics.scrape_errors` e `radar_metrics.last_values`; essa coleta é
+    existente no artefato, mas runtime da carga e scrape real ainda dependem de
+    nova execução, sem valores verificados nesta sessão. O relatório também separa
+   `expected_response_count` e `latency_ms_expected_response` pelas métricas k6
+   com tag `expected_response:true`, evitando misturar a latência de `503`
+    esperados com a dos `200` (`scripts/load-ramp.sh:108-137,197-298`;
+    `scripts/sample-radar-metrics.sh:12-40`). **Relato do
+   operador de 2026-11-22 (não verificado independentemente):** a matriz passou
+   os checks e as rejeições esperadas; relatórios anteriores não têm essa seção
+   e uma nova execução será necessária para persistir os campos. A mecânica de
+   fixtures permanece: os
   cenários aceitam `LOADTEST_CNPJS`/`K6_CNPJS` como lista opcional de fixtures
    CNPJ distintas; `fixture-mode=all-miss` força somente CNPJ e recusa a
    exaustão da lista. O controlador aceita `--vus`, `--duration`,

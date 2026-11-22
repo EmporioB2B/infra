@@ -140,5 +140,5 @@ a recuperação da janela antes de outro cenário de login.
 Por padrão, o controlador grava um resumo JSON em `relatorios/carga/`, contendo
 ID, cenário, plano, status, throughput, p50/p95/p99, checks e amostras
 sanitizadas de `docker stats`, além de eventos `oom`, `restart` e `die`
-observados no projeto. Dados brutos permanecem temporários e não são
-versionados.
+observados no projeto, e uma amostra do listener interno de métricas RFB.
+Dados brutos permanecem temporários e não são versionados.

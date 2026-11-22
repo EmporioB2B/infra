@@ -117,9 +117,12 @@ na console antes de qualquer operação. O runbook legível está em
   (estimativa) e a soma dos tetos (24 GiB) não deixa folga de sistema se ambos
   os stacks estourarem simultaneamente — monitorar a folga real do host antes
   da produção entrar. Métricas de staging (Prometheus com `remote_write`
-  dentro do Compose) são **artefato existente, runtime healthy reportado pelo
-  operador e não verificado independentemente**;
-  **relato do operador (2026-11-14, não verificado independentemente nesta
+   dentro do Compose) são **artefato existente, runtime healthy reportado pelo
+   operador e não verificado independentemente**;
+  **Exceção temporária de benchmark MVP, confirmada pelo operador em
+  2026-11-22:** o container Radar está limitado a 1 CPU/1536M, abaixo do teto
+  histórico de 2 CPU por stack; o runtime do novo Radar ainda está pendente.
+   **relato do operador (2026-11-14, não verificado independentemente nesta
   sessão):** logs via `dokploy-vector` aparecem no Grafana Cloud. O Label browser
   reportado lista `dokploy_application`, `dokploy_environment`,
   `dokploy_organization`, `dokploy_project`, `dokploy_server`, `dokploy_test`

@@ -208,7 +208,23 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
    (`compose/docker-compose.staging.yml:372-481`;
    `scripts/load-ramp.sh:28-42,84-124`;
    `.github/workflows/publish-loadtest.yml:22-81`).
-    **Existente — extensão da matriz RFB no artefato, runtime não verificado:**
+      **Existente — coleta de métricas durante a carga e extensão da matriz RFB:**
+      `scripts/load-ramp.sh` inicia em paralelo
+      `scripts/sample-radar-metrics.sh`, que consulta por HTTP
+      `http://10.254.31.30:8082/metrics` sem `docker exec` nem socket Docker; o
+      relatório inclui `sample_count`, `scrape_errors` e `last_values`. A
+      mecânica está existente no artefato, mas carga/runtime e scrape real ainda
+      dependem de nova execução; esta descrição não é evidência de valores
+      coletados. **Existente — extensão da matriz RFB e métricas do relatório:**
+      o relatório
+     separa `expected_response_count` e `latency_ms_expected_response` pelas
+     métricas k6 com `expected_response:true`, sem misturar a latência das
+     rejeições `503` esperadas com a dos `200`
+      (`scripts/load-ramp.sh:108-137,244-298`;
+      `scripts/sample-radar-metrics.sh:12-40`). **Relato do operador de 2026-11-22
+     (não verificado independentemente):** a matriz passou os checks e as
+     rejeições esperadas; relatórios anteriores não têm essa seção e uma nova
+     execução é necessária para persistir os campos.
      `LOADTEST_CNPJS`/`K6_CNPJS` é opcional, `all-miss` usa somente CNPJ e
      recusa exaustão de fixtures, `--vus`/`--duration` selecionam
      `constant-vus` com pacing de 1s por VU, e

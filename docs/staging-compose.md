@@ -163,6 +163,13 @@ Provisionar aproximadamente **18 GB livres** no volume de estado para acomodar
 o crescimento dos Parquets e a transição mensal. Não remover o volume com
 `down -v`, prune ou operação equivalente.
 
+Para o benchmark MVP, o limite temporário do container Radar é **1 CPU e
+1536M**, acima do limite anterior de `0,40 CPU/768M`, mas ainda abaixo do
+dimensionamento de concorrência recomendado pelo owner do Radar. A soma dos
+limites long-lived do stack fica temporariamente acima do teto histórico de
+2 CPU; essa exceção vale somente para staging e deve ser reavaliada após a
+matriz de carga.
+
 O sync inicial ocorre em background e o `/health/ready` continua representando
 somente a projeção CEP. O estado RFB deve ser acompanhado por
 `radar_rfb_cache_ready` e `radar_rfb_cache_fallback_active`. Durante

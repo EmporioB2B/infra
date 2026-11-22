@@ -134,12 +134,21 @@ Fotografia factual vigente. Não é cronologia de tasks.
    O controlador exige `--confirm-staging`, aceita `--env-file` e repassa esse
    arquivo ao Compose; o arquivo protegido deve conter todas as variáveis de
    interpolação exigidas pelo Compose, não deve ser versionado nem impresso.
-   Coleta `docker stats` temporário e escreve relatório sanitizado. A seleção
+    Coleta `docker stats` temporário e, durante o processamento da carga,
+    executa em paralelo `scripts/sample-radar-metrics.sh`, consultando
+    `http://10.254.31.30:8082/metrics` diretamente via HTTP (sem `docker exec`
+    ou socket Docker); o relatório sanitizado inclui `sample_count`,
+    `scrape_errors` e `last_values` em `radar_metrics`. A seleção
    dos containers usa o label `com.docker.compose.project` e aceita tanto a
    base `emporio-staging` quanto projetos Dokploy com sufixo
    (`emporio-staging-*`); o filtro exato anterior podia deixar o stack fora do
    relatório e coletar apenas o loadtest
-   (`scripts/sample-container-stats.sh:33-35`). O parser
+    (`scripts/sample-container-stats.sh:33-35`;
+    `scripts/load-ramp.sh:108-137,244-298`;
+    `scripts/sample-radar-metrics.sh:12-40`). A coleta e o formato são
+    existentes no artefato, mas runtime da carga, coleta efetiva e scrape real
+    ainda dependem de nova execução; não há evidência de valores coletados nesta
+    auditoria. O parser
    vigente lê as métricas k6 diretamente em `metrics.http_req_duration`,
    `metrics.http_reqs` e `metrics.checks`; os três cenários agora solicitam
    explicitamente `p(99)` em `summaryTrendStats`, mas relatórios de execuções
@@ -152,7 +161,15 @@ Fotografia factual vigente. Não é cronologia de tasks.
    verificados nesta sessão
    (`scripts/load-ramp.sh:28-42,115-124`; `compose/docker-compose.staging.yml:3-9,13-18`;
    `env/.env.staging.example:1-4,107-116`; `docs/load-testing.md:46-52`).
-   **Existente — extensão do harness no artefato; execução não verificada:**
+    **Existente — extensão do harness no artefato:** o relatório agora separa
+    `expected_response_count` e `latency_ms_expected_response`, usando as
+    métricas k6 com tag `expected_response:true`; assim, a latência das
+    rejeições `503` esperadas não é misturada à dos `200`
+    (`scripts/load-ramp.sh:197-259`). **Relato do operador de 2026-11-22
+    (não verificado independentemente):** a matriz passou os checks e as
+    rejeições esperadas. Relatórios anteriores não têm esses campos; uma nova
+    execução da matriz é necessária para persistir essa seção nos relatórios.
+    A extensão de fixtures permanece:
     `LOADTEST_CNPJS`/`K6_CNPJS` opcional, modo `all-miss` com recusa de
     exaustão, executor `constant-vus` com pacing de 1s por VU, flags
     `--vus`/`--duration`/`--fixture-offset`/`--expect-capacity-rejection` e
@@ -793,6 +810,12 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `env/.env.staging.example:83-96`, `docs/staging-compose.md:154-175`).
   O headroom operacional reportado agora é de **18 GB livres** para o volume
   de estado; isso é capacidade reportada, não uma medição independente.
+  **Exceção temporária de benchmark MVP (existente nos artefatos, confirmada pelo
+  operador em 2026-11-22):** Radar limitado a 1 CPU/1536M, com
+  `RFB_LOOKUP_ACTIVE_LIMIT=2`, `RFB_LOOKUP_QUEUE_LIMIT=8`,
+  `RFB_LOOKUP_ACQUISITION_TIMEOUT=1.0` e
+  `RFB_DUCKDB_MEMORY_BUDGET=1GB`, apesar do teto histórico de 2 CPU por stack.
+  O runtime do novo Radar ainda está pendente; não é fato verificado em runtime.
   **Existente — borda de staging (2026-11-13):** zona Active na Cloudflare,
    túnel `emporio-staging` criado no dashboard; connector healthy na VPS foi
    reportado pelo operador em TASK-INFRA-026, sem validação independente. Rotas
