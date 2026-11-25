@@ -244,6 +244,7 @@ services:
       - radar_state:/var/lib/radar-middleware/state
     networks:
       radar-net:
+      hermes-radar-net:
       radar-egress:
       radar-metrics-net:
         ipv4_address: 10.254.31.30
@@ -457,6 +458,10 @@ networks:
           gateway: 10.254.32.1
   radar-net:
     name: emporio-staging_radar-net
+    driver: bridge
+    internal: true
+  hermes-radar-net:
+    name: emporio-staging_hermes-radar-net
     driver: bridge
     internal: true
   database:

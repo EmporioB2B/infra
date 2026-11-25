@@ -117,6 +117,18 @@ Fotografia factual vigente. Não é cronologia de tasks.
    reais, primeiro login Access e auditoria independente do deploy/smoke não
    foram verificados nesta sessão. Ver
    [`../../docs/staging-contract.md`](../../docs/staging-contract.md).
+    **Existente — staging, artefato:** o YAML define
+    `emporio-staging_hermes-radar-net` como interna, conecta o Radar e não
+    publica portas; ambos os `docker compose config --quiet` com examples
+    passaram na validação local final. O Compose Hermes é separado; seu
+    membership/consumo efetivo e o compartilhamento entre stacks Dokploy não
+    foram validados operacionalmente. Worker→Radar por POST em `radar:8000` é
+    fluxo acordado, com implementação Hermes RDR-01 sob repo dono, não runtime
+    comprovado. Callback em `hermes:3000` é futuro e depende de RDR-02. A API
+    não participa da nova rede; a rede antiga API↔Radar (`radar-net`) permanece.
+    A exceção sem auth/TLS vale somente para dev/staging
+    (`compose/docker-compose.staging.yml:200-246,424-452`;
+   `../../docs/staging-compose.md:38-57`).
    **Existente — TASK-INFRA-027 (artefatos; execução não verificada nesta
    sessão):** o staging contém serviços k6 somente no profile manual
    `loadtest`: `loadtest` alcança a API por `loadtest-egress`; o controlador
@@ -305,7 +317,27 @@ Fotografia factual vigente. Não é cronologia de tasks.
   `env/.env.dev.example` (cobre todas as
   `${VAR:?}` do compose; placeholders apenas), `scripts/up-dev.sh`,
   `scripts/init-rustfs.sh`, `scripts/smoke.sh`, `scripts/gen-dev-certs.sh` e
-  `docs/networks.md`/`docs/observability.md`.
+  `docs/networks.md`/`docs/observability.md`. **Existente — integração
+  Hermes↔Radar em dev (lado Infra):** a rede `emporio-dev_hermes-radar-net` é
+  criada pela Infra; a configuração local de dev e staging passou `docker
+  compose config --quiet`. Na execução final dev desta sessão para
+  TASK-INFRA-028, `scripts/up-dev.sh --no-build` terminou com exit 0, os
+  serviços long-lived ficaram healthy e o smoke final terminou com exit 0.
+  O checker contém uma allowlist limitada que inclui `delivery_status` e
+  `execution_status`. ShellCheck em container passou para `scripts/smoke.sh`;
+  a verificação de todos os scripts apontou somente SC2016 preexistente em
+  `scripts/seed-admin-staging.sh`, que não foi alterado. `docker network inspect`
+  nesta sessão confirmou `internal=true` e somente `emporio-dev-radar-1`
+  conectado; a probe HTTP para `radar:8000` nessa rede retornou 200. Hermes
+  permanece sem membership em runtime: `radar:8000` e `hermes:3000` são
+  contratos, e worker→Radar ainda não foi validado com Hermes conectado.
+  API/Backend não integra a nova rede; `radar-net` API↔Radar segue preservada.
+  Callback Radar→Hermes é futuro (RDR-02). Staging Dokploy e o compartilhamento
+  da rede entre stacks não foram validados. A exceção sem auth/TLS vale somente
+  dev/staging. Evidência dos artefatos:
+  `compose/docker-compose.dev.yml:385-419,602-616`;
+  `compose/docker-compose.staging.yml:200-246,424-452`; evidência de execução
+  verificada nesta sessão para TASK-INFRA-028.
 - **Existente — dev:** o example cobre os nomes das variáveis obrigatórias com
   placeholders completos `replace-with-*`; o operador ainda precisa substituir
   cada valor antes da subida, pois o `rustfs-init` rejeita placeholders como
@@ -689,7 +721,9 @@ Fotografia factual vigente. Não é cronologia de tasks.
   JVM.
 - Backlog futuro (não bloqueia o MVP de deploy): mTLS/gateway interno do
   Radar (TASK-080/006 no repo Back e TASK-006 no repo Radar),
-  monitoramento/uptime, backup do Supabase, entrada do Hermes no stack,
+  monitoramento/uptime, backup do Supabase, validação operacional da rede
+  Hermes↔Radar entre os stacks separados do Dokploy e implementação do callback
+  Radar→Hermes (RDR-02),
   pin de imagem por sha no Dokploy. A integração de produção com Grafana Cloud
   Loki permanece planejada: o Dokploy configura o provider e instala
   `dokploy-vector`; nenhum Loki/Grafana entra no Compose da aplicação.

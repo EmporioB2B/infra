@@ -18,8 +18,13 @@ emuladores no lugar dos serviços externos e sem cloudflared.
                          │     radar → R2 de teste / ViaCEP          │
                          └───────────────────────────────────────────┘
 
-    radar-net (bridge, internal: true)   ← zona de contenção
-      backend ──http://radar:8000── radar        (SEM portas no host)
+     radar-net (bridge, internal: true)   ← zona de contenção
+       backend ──http://radar:8000── radar        (SEM portas no host)
+
+     hermes-radar-net (bridge, internal: true) ← alvo contratado Hermes↔Radar
+       worker Hermes ──http://radar:8000──> radar
+       Radar ──http://hermes:3000──> app Hermes (callback futuro; RDR-02)
+       (sem portas no host; Hermes conecta-se como rede externa)
 
     metrics-net (bridge, internal: true)
       backend:10.254.20.10:8081 ── prometheus:10.254.20.20
@@ -34,6 +39,7 @@ emuladores no lugar dos serviços externos e sem cloudflared.
 |---|---|---|---|
 | `default` | bridge | front-dev, backend, postgres, db-bootstrap, migrate, rustfs, rustfs-init, media-gateway, mailpit | tráfego interno do stack; toda publicação no host é prefixada `127.0.0.1` |
 | `radar-net` | bridge **`internal: true`** | backend, radar | única via para a API privada do Radar; sem gateway — nada entra/sai dela pelo host nem por outras redes |
+| `hermes-radar-net` | bridge **`internal: true`** | radar e, quando o Compose Hermes conectar-se, Hermes | rede dedicada para os dois fluxos Hermes↔Radar; não conectar Backend/API, banco ou observabilidade |
 | `egress` | bridge | radar | saída controlada para o R2 de teste real e ViaCEP |
 | `observability` | bridge | vector, loki, grafana, prometheus | pipeline local de logs e consulta de métricas; sem acesso a `radar-net`; Vector recebe somente pela porta de loopback publicada pelo host |
 | `metrics-net` | bridge **`internal: true`** | backend, prometheus | único caminho do scraper para `backend:8081`; subnet `10.254.20.0/24`, gateway `10.254.20.1`; sem portas publicadas |
@@ -165,6 +171,11 @@ docker compose --env-file env/.env.dev -f compose/docker-compose.dev.yml \
 docker network inspect emporio-dev_radar-net \
   --format '{{json .Inspect.Options.Internal}}'                        # true
 
+# Hermes↔Radar: rede interna criada pela Infra; no momento do smoke deve ter
+# Radar e opcionalmente Hermes, sem outros serviços.
+docker network inspect emporio-dev_hermes-radar-net \
+  --format '{{.Internal}} {{range .Containers}}{{.Name}} {{end}}'       # true + radar [+ hermes]
+
 # Prometheus alcança o management pela metrics-net
 docker compose --env-file env/.env.dev -f compose/docker-compose.dev.yml \
   exec prometheus wget -q -O - http://10.254.20.10:8081/actuator/prometheus \
@@ -186,4 +197,21 @@ docker network inspect emporio-dev_radar-metrics-net \
   --format '{{.Internal}} {{range .Containers}}{{.Name}} {{end}}'       # true + radar + prometheus
 docker compose --env-file env/.env.dev -f compose/docker-compose.dev.yml \
   port radar 8082                                                       # vazio
+docker compose --env-file env/.env.dev -f compose/docker-compose.dev.yml \
+  port radar 8000                                                       # vazio
 ```
+
+## Rede Hermes↔Radar (dev)
+
+A Infra cria `emporio-dev_hermes-radar-net` no Compose integrado e conecta o
+serviço `radar` a ela. O Compose Hermes deve declará-la como externa com esse
+nome e conectar os processos que precisam do transporte: o `worker` para a
+submissão e o `app` HTTP para receber o callback futuro (RDR-02). O DNS esperado
+é `radar:8000` para a submissão e `hermes:3000` para o callback. A rede do Radar
+continua separada de `radar-net`; API/Backend não se conecta a esta nova rede.
+
+Até o Hermes anexar seu Compose, o smoke da Infra aceita Radar sozinho ou Radar
+mais Hermes, mas rejeita qualquer outro membro. A conectividade funcional de
+callback não está provada pela existência da rede e aguarda a implementação do
+endpoint Hermes. HTTP sem autenticação é exceção somente de dev/staging, não
+configuração de produção.

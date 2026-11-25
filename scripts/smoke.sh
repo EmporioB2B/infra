@@ -28,8 +28,9 @@
 #  18b. heap JVM (jvm_heap_used_bytes) presente; HTTP RED validado quando houver
 #      tráfego /api desde o boot;
 #  19. Radar não alcança a porta de management;
-#  20. metrics-net/radar-net possuem exatamente os membros contratados.
-#  21. bootstrap+migrate concluíram; runtime usa emporio_app, V10 foi aplicada
+#  20. redes de métricas/radar possuem os membros contratados;
+#  21. hermes-radar-net é interna, contém Radar e somente Radar/Hermes.
+#  22. bootstrap+migrate concluíram; runtime usa emporio_app, V10 foi aplicada
 #      e uma sessão do Backend Java aparece no PostgreSQL sob essa role.
 #
 # Exit != 0 se algum check falhar; o smoke continua os demais checks para dar
@@ -44,6 +45,7 @@ NET="emporio-dev_default"
 METRICS_NET="emporio-dev_metrics-net"
 RADAR_NET="emporio-dev_radar-net"
 RADAR_METRICS_NET="emporio-dev_radar-metrics-net"
+HERMES_RADAR_NET="emporio-dev_hermes-radar-net"
 MANAGEMENT_ADDRESS="10.254.20.10"
 RADAR_METRICS_ADDRESS="10.254.21.30"
 
@@ -238,6 +240,13 @@ else
   bad "radar: 8082 possui publicação ou respondeu pelo loopback do host"
 fi
 
+if [[ -z "$(compose port radar 8000 2>/dev/null || true)" ]] \
+  && ! curl -fsS --max-time 3 http://127.0.0.1:8000/health/live >/dev/null 2>&1; then
+  ok "radar: 8000 não publicada no host"
+else
+  bad "radar: 8000 possui publicação ou respondeu pelo loopback do host"
+fi
+
 # O Radar possui somente radar-net/egress e deve falhar ao alcançar o bind de
 # management, que existe exclusivamente na metrics-net.
 if compose exec -T radar python -c \
@@ -315,6 +324,29 @@ if [[ "${#radar_members[@]}" -eq 2 && "$radar_has_backend" -eq 1 \
   ok "radar-net: internal e contém somente backend/radar"
 else
   bad "radar-net: topologia inesperada (${radar_members[*]:-vazia})"
+fi
+
+hermes_radar_members=()
+while IFS= read -r member; do
+  [[ -n "$member" ]] && hermes_radar_members+=("$member")
+done < <(network_members "$HERMES_RADAR_NET")
+
+hermes_radar_has_radar=0
+hermes_radar_has_unapproved=0
+for member in "${hermes_radar_members[@]}"; do
+  member_service="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$member" 2>/dev/null || true)"
+  case "$member_service" in
+    radar) hermes_radar_has_radar=1 ;;
+    app|worker) ;;
+    *) hermes_radar_has_unapproved=1 ;;
+  esac
+done
+if [[ "$hermes_radar_has_radar" -eq 1 \
+  && "$hermes_radar_has_unapproved" -eq 0 \
+  && "$(docker network inspect "$HERMES_RADAR_NET" --format '{{.Internal}}' 2>/dev/null || true)" == "true" ]]; then
+  ok "hermes-radar-net: internal; Radar presente; nenhum membro fora de Radar/Hermes"
+else
+  bad "hermes-radar-net: topologia inesperada (${hermes_radar_members[*]:-vazia})"
 fi
 
 # 4. O Grafana alcança o Prometheus pela rede observability; a UI continua em

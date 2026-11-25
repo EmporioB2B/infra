@@ -35,6 +35,28 @@ configurada em 2026-11-13.
   manual); isso é pendência do contrato de produção (TASK-INFRA-002/003), não
   do staging.
 
+## Rede privada Hermes↔Radar (staging)
+
+O Compose Infra cria `emporio-staging_hermes-radar-net` como bridge
+`internal: true` e conecta somente o serviço `radar`. O Compose Hermes, em outro
+stack, deve declarar a rede como externa pelo nome estável e conectar os
+processos que precisam do transporte: `worker` (submissão) e `app` (callback
+futuro). O alias `hermes` deve apontar para o `app`; `worker` precisa apenas
+participar da rede para chamar `radar:8000`. A porta interna do `app` é 3000.
+A porta 8000 do Radar não é publicada no host; a API mantém seu acesso ao Radar
+pela `radar-net` existente e não é anexada à nova rede.
+
+Ordem esperada quando houver implantação autorizada: primeiro o stack Infra
+cria a rede; depois o stack Hermes conecta-se à rede externa existente. A
+capacidade do Dokploy de compartilhar essa rede entre stacks separados ainda
+precisa ser validada pelo operador no ambiente staging. `docker compose config`
+local valida apenas o YAML, não a integração entre projetos no Dokploy. Esta
+documentação não autoriza nem registra deploy ou alteração remota. HTTP sem
+autenticação é exceção controlada para dev/staging e não vale para produção.
+
+O callback Radar→Hermes é futuro (RDR-02); a rede bidirecional não comprova a
+rota Hermes nem substitui o smoke funcional após sua implementação.
+
 ## Bootstrap PostgreSQL
 
 `db-bootstrap` aplica o SQL canônico da Infra e o job `migrate` executa o runner

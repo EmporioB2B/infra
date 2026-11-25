@@ -173,7 +173,9 @@ VPS OCI única: Dokploy instalado + staging primeiro + produção futura
   interna e exclusiva de cloudflared↔front, e `tunnel-api` é interna e
   exclusiva de cloudflared↔api (`10.254.33.0/24` e `10.254.32.0/24`,
   respectivamente),
-  `radar-net` interna e só API↔Radar; `database` interna (postgres/bootstrap/
+  `radar-net` interna e só API↔Radar; `hermes-radar-net` interna, definida no
+  YAML para Radar e Compose Hermes externo (submissão worker→Radar por
+  contrato; callback futuro Radar→Hermes); `database` interna (postgres/bootstrap/
   migrate/api); `metrics-net` interna (api/prometheus) e `radar-metrics-net`
   interna (radar/prometheus). Redes `api-egress`, `radar-egress`,
   `tunnel-egress` e `prometheus-egress` são bridges separadas, cada uma ligada
@@ -394,7 +396,38 @@ emuladores no lugar dos serviços externos e sem cloudflared. Implementado em
 `compose/docker-compose.dev.yml`, com healthchecks, `scripts/smoke.sh`,
 isolamento da `radar-net`, `media-gateway` local para fotos públicas e
 observabilidade local.
-Detalhes de portas/publicação em `docs/networks.md`:
+Detalhes de portas/publicação em `docs/networks.md`. **Existente — rede
+Hermes↔Radar em dev:** a Infra cria a rede interna exclusiva
+`emporio-dev_hermes-radar-net`; o Compose foi renderizado/validado e a rede
+runtime foi inspecionada como `internal=true`, com somente
+`emporio-dev-radar-1` conectado. O Hermes não está conectado em runtime; nomes
+`radar:8000`/`hermes:3000` são contrato, não prova de conectividade. Worker→Radar
+é fluxo acordado, com implementação Hermes RDR-01 sob responsabilidade do repo
+dono, não integração runtime demonstrada. A API/Backend não participa nem se
+conecta à rede; a rede antiga API↔Radar (`radar-net`) permanece preservada. O
+callback Radar→app Hermes é futuro até RDR-02. Não há portas publicadas.
+**Existente — staging:** o YAML define `emporio-staging_hermes-radar-net`
+interna e foi validado por `docker compose config --quiet`; compartilhamento
+entre stacks separados Dokploy não foi validado operacionalmente. HTTP sem
+auth/TLS é exceção somente de dev/staging, não configuração de produção
+(`compose/docker-compose.dev.yml:385-419,602-616`;
+`compose/docker-compose.staging.yml:200-246,424-452`; `docs/networks.md:204-217`;
+`../../docs/staging-compose.md:38-57`).
+
+**Existente — validação final dev (TASK-INFRA-028, evidência desta sessão):**
+`docker compose config --quiet` para dev e staging passou;
+`scripts/up-dev.sh --no-build` terminou com exit 0 e os serviços long-lived
+ficaram healthy; o smoke final terminou com exit 0. O checker agora inclui
+`delivery_status` e `execution_status` na allowlist limitada. ShellCheck em
+container passou para `scripts/smoke.sh`; ao verificar todos os scripts, o
+único achado foi SC2016 preexistente em
+`scripts/seed-admin-staging.sh` (não alterado). Em runtime dev, a rede nova
+estava `internal=true` e somente o Radar estava conectado; a probe HTTP para
+`radar:8000` nessa rede retornou 200. Isso não demonstra Hermes conectado: ele
+continua sem membership em runtime, e o callback permanece futuro. Staging
+Dokploy não foi validado; não houve deploy nem consulta Dokploy. A evidência
+valida somente a execução dev e a configuração local, não a
+integração runtime Hermes nem implantação staging.
 
 ```text
 services:
@@ -426,6 +459,7 @@ networks:
   default    front-dev ↔ backend ↔ emuladores (postgres, rustfs, rustfs-init,
              media-gateway, mailpit); logging driver → Vector via loopback
   radar-net  internal: exclusivamente backend ↔ radar
+  hermes-radar-net internal: Radar; Hermes somente por contrato (sem API)
   egress     radar → R2 de teste / ViaCEP
   observability  vector ↔ loki ↔ prometheus ↔ grafana; sem acesso a radar-net
   metrics-net    internal: backend:10.254.20.10 ↔ prometheus:10.254.20.20

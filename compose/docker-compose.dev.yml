@@ -412,6 +412,7 @@ services:
       retries: 3
     networks:
       radar-net:
+      hermes-radar-net:
       egress:
       radar-metrics-net:
         ipv4_address: *radar-metrics-address
@@ -605,6 +606,12 @@ networks:
     # Zona de contenção do Radar (sem auth serviço-a-serviço hoje):
     # exclusivamente backend <-> radar, sem saída para o host nem para as
     # demais redes. Espelho da rede homônima em produção.
+    internal: true
+  hermes-radar-net:
+    # Rede privada de integração Hermes↔Radar. O Hermes vive em outro Compose
+    # e conecta-se a esta rede pelo nome estável; não incluir API/Backend.
+    name: emporio-dev_hermes-radar-net
+    driver: bridge
     internal: true
   egress:
     # Saída controlada do Radar para o R2 de teste e ViaCEP. Um serviço em

@@ -876,5 +876,22 @@ O Radar **existente — dev** não é emulado: usa o R2 de teste real (restriç�
 
 ## Hermes_Robo_Whats_Python
 
-Fora do stack nesta fase. Consumidor futuro da API privada do Radar
-(mesmo padrão de rede interna). Sem imagem, compose ou CI neste momento.
+**Existente — rede Infra em dev:** a Infra cria a rede dedicada
+`emporio-dev_hermes-radar-net`, `internal: true`, e conecta o Radar. A validação
+runtime final nesta sessão encontrou somente
+`emporio-dev-radar-1`; Hermes não está anexado. Portanto, Hermes↔Radar é
+contrato, não conexão runtime. **Existente — staging, artefato:** o YAML define
+`emporio-staging_hermes-radar-net` interna e conecta o Radar; `docker compose
+config --quiet` passou com os examples, mas o compartilhamento entre stacks
+Dokploy não foi validado operacionalmente.
+
+**Existente — fluxo acordado, implementação sob repo dono:** Worker→Radar por
+POST em `http://radar:8000` é a integração Hermes RDR-01; isso não comprova
+execução nem associação à rede no Compose Hermes. O endereço `http://hermes:3000`
+é apenas o destino contratual do callback futuro. **Planejado — callback:**
+Radar→Hermes só será funcional após RDR-02. API/Backend não participa da nova
+rede; a rede antiga API↔Radar `radar-net` permanece. Nenhum serviço da integração
+publica portas. A exceção sem auth/TLS vale somente dev/staging, não produção.
+Fontes Infra: `compose/docker-compose.dev.yml:385-419,602-616` e
+`compose/docker-compose.staging.yml:200-246,424-452`; ver também
+`../../docs/staging-compose.md:38-57`.

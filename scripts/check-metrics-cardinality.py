@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Valida a fronteira de labels dos scrapes Prometheus da Infra.
 
-Não duplica a allowlist finita de valores do Backend: verifica apenas que toda
-label observada pertence ao vocabulário conhecido e que nenhum valor carrega
-URL de origem, e-mail ou UUID — a cardinalidade/privacidade de DOMÍNIO
-(operation/outcome/error_code/...) é de responsabilidade do Backend.
+Não duplica a allowlist finita de valores das aplicações: verifica apenas que
+toda label observada pertence ao vocabulário conhecido e que nenhum valor
+carrega URL de origem, e-mail ou UUID — a cardinalidade/privacidade de domínio
+é responsabilidade do serviço que emite a métrica.
 """
 
 import re
@@ -13,7 +13,9 @@ import sys
 ALLOWED_LABELS = {
     "codigo_cidade",
     "dependency",
+    "delivery_status",
     "error_code",
+    "execution_status",
     "failure_class",
     "le",
     "level",
